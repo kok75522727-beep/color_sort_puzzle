@@ -1,5 +1,5 @@
 name: color_sort_puzzle
-description: A fun Color Sort Puzzle game.
+description: A premium Color Sort Puzzle game.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  shared_preferences: ^2.3.2
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
