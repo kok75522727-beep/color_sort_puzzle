@@ -646,4 +646,235 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  
+                  children: [
+                    _actionButton(
+                      icon: Icons.undo,
+                      label: 'Undo',
+                      color: const Color(0xFF334155),
+                      onTap: _undo,
+                    ),
+                    _actionButton(
+                      icon: Icons.lightbulb,
+                      label: 'Hint',
+                      isAd: true,
+                      color: const Color(0xFFD97706),
+                      onTap: _useHint,
+                    ),
+                    _actionButton(
+                      icon: Icons.add_box_rounded,
+                      label: '+1 Bottle',
+                      isAd: true,
+                      color: const Color(0xFF0284C7),
+                      onTap: _addExtraBottle,
+                    ),
+                  ],
+                ),
+              ),
+
+              // Banner Ad Placeholder UI (နောက်ပိုင်း AdMob Banner ထည့်မယ့်နေရာ)
+              Container(
+                height: 52,
+                width: double.infinity,
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white12),
+                ),
+                alignment: Alignment.center,
+                child: const Text(
+                  'AD BANNER SPACE (AdMob Ready)',
+                  style: TextStyle(color: Colors.white38, fontSize: 12, letterSpacing: 1.2),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottle(int index) {
+    bool isSelected = selectedBottleIndex == index;
+    bool isPouring = pouringBottleIndex == index;
+    bool isHint = hintFromIndex == index || hintToIndex == index;
+    List<Color> colors = bottles[index];
+
+    Color borderColor = Colors.white54;
+    if (isHint) {
+      borderColor = const Color(0xFFFFD166);
+    } else if (isSelected) {
+      borderColor = const Color(0xFF00D2FF);
+    }
+
+    return GestureDetector(
+      onTap: () => _onBottleTap(index),
+      child: AnimatedRotation(
+        turns: isPouring ? 0.08 : 0.0,
+        duration: const Duration(milliseconds: 200),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutBack,
+          transform: Matrix4.translationValues(0, (isSelected || isPouring) ? -22 : 0, 0),
+          width: 58,
+          height: 174,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.06),
+            border: Border.all(
+              color: borderColor,
+              width: (isSelected || isHint) ? 3 : 2,
+            ),
+            boxShadow: (isSelected || isHint)
+                ? [BoxShadow(color: borderColor.withOpacity(0.45), blurRadius: 14, spreadRadius: 1)]
+                : [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(26),
+              bottomRight: Radius.circular(26),
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(24),
+              bottomRight: Radius.circular(24),
+              topLeft: Radius.circular(6),
+              topRight: Radius.circular(6),
+            ),
+            child: Stack(
+              children: [
+                // အရည်အရှင် (Liquid Wave CustomPainter)
+                AnimatedBuilder(
+                  animation: _waveController,
+                  builder: (context, child) {
+                    return CustomPaint(
+                      size: const Size(58, 174),
+                      painter: LiquidBottlePainter(
+                        colors: colors,
+                        maxCapacity: maxCapacity,
+                        wavePhase: _waveController.value * 2 * pi,
+                      ),
+                    );
+                  },
+                ),
+                // ဖန်ခွက် မှန်ရောင်ပြန် (Glass Highlight)
+                Positioned(
+                  left: 6,
+                  top: 12,
+                  bottom: 20,
+                  child: Container(
+                    width: 6,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+    bool isAd = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(color: color.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: Colors.white, size: 20),
+                const SizedBox(width: 6),
+                Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          if (isAd)
+            Positioned(
+              top: -8,
+              right: -6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF3366),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'AD',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ဖန်ခွက်ထဲက ရေလှိုင်း Animation ဆွဲပေးမယ့် CustomPainter
+class LiquidBottlePainter extends CustomPainter {
+  final List<Color> colors;
+  final int maxCapacity;
+  final double wavePhase;
+
+  LiquidBottlePainter({
+    required this.colors,
+    required this.maxCapacity,
+    required this.wavePhase,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (colors.isEmpty) return;
+
+    final double layerHeight = (size.height - 16) / maxCapacity;
+
+    for (int i = 0; i < colors.length; i++) {
+      final paint = Paint()..color = colors[i];
+      final double bottomY = size.height - (i * layerHeight);
+      final double topY = bottomY - layerHeight;
+
+      final bool isTopLayer = (i == colors.length - 1);
+
+      if (!isTopLayer) {
+        canvas.drawRect(Rect.fromLTRB(0, topY, size.width, bottomY + 1), paint);
+      } else {
+        // အပေါ်ဆုံးအလွှာကို ရေလှိုင်းပုံစံ (Sine Wave) ဆွဲမယ်
+        final path = Path();
+        path.moveTo(0, bottomY + 1);
+        path.lineTo(0, topY);
+
+        for (double x = 0; x <= size.width; x++) {
+          final y = topY + sin((x / size.width * 2 * pi) + wavePhase) * 3.5;
+          path.lineTo(x, y);
+        }
+
+        path.lineTo(size.width, bottomY + 1);
+        path.close();
+        canvas.drawPath(path, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant LiquidBottlePainter oldDelegate) => true;
+}
