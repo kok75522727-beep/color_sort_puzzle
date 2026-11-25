@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:audioplayers/audioplayers.dart';
 
@@ -9,49 +10,81 @@ void main() {
   runApp(const ColorSortApp());
 }
 
-class ColorSortApp extends StatelessWidget {
-  const ColorSortApp({super.key});
+class AppThemeData {
+  final String name;
+  final int price;
+  final List<Color> bgGradient;
+  final Color accentColor;
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Color Sort Pro',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0F172A),
-      ),
-      home: const GameScreen(),
-    );
-  }
+  const AppThemeData({
+    required this.name,
+    required this.price,
+    required this.bgGradient,
+    required this.accentColor,
+  });
 }
 
-/// Copyright-Free Built-in Sound & BGM Synthesizer (MP3 ဖိုင်မလိုဘဲ အသံထွက်မည်)
+const List<AppThemeData> appThemes = [
+  AppThemeData(
+    name: 'Midnight Neon',
+    price: 0,
+    bgGradient: [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF0F172A)],
+    accentColor: Color(0xFF00D2FF),
+  ),
+  AppThemeData(
+    name: 'Galaxy Purple',
+    price: 100,
+    bgGradient: [Color(0xFF1A0B2E), Color(0xFF3B0764), Color(0xFF1A0B2E)],
+    accentColor: Color(0xFFE879F9),
+  ),
+  AppThemeData(
+    name: 'Sunset Glow',
+    price: 150,
+    bgGradient: [Color(0xFF2A0800), Color(0xFF7C2D12), Color(0xFF1C0A00)],
+    accentColor: Color(0xFFFF9F1C),
+  ),
+  AppThemeData(
+    name: 'Emerald Forest',
+    price: 200,
+    bgGradient: [Color(0xFF022C22), Color(0xFF064E3B), Color(0xFF022C22)],
+    accentColor: Color(0xFF34D399),
+  ),
+];
+
+/// Global Sound Engine
 class SoundEngine {
+  static final SoundEngine instance = SoundEngine._internal();
   final AudioPlayer _bgmPlayer = AudioPlayer();
   final AudioPlayer _sfxPlayer = AudioPlayer();
   bool isMuted = false;
+  bool _bgmStarted = false;
 
   late Uint8List _bgmWav;
   late Uint8List _clickWav;
   late Uint8List _pourWav;
+  late Uint8List _bottleDoneWav;
   late Uint8List _winWav;
   late Uint8List _loseWav;
 
-  SoundEngine() {
+  SoundEngine._internal() {
     _bgmWav = _generateChillBgm();
     _clickWav = _generateTone(520, 0.08, volume: 0.35);
     _pourWav = _generateSweep(300, 680, 0.25, volume: 0.4);
+    _bottleDoneWav = _generateMelody([659.25, 880.00], 0.10);
     _winWav = _generateMelody([523.25, 659.25, 783.99, 1046.50], 0.14);
     _loseWav = _generateMelody([392.00, 349.23, 311.13, 261.63], 0.22);
   }
 
   Future<void> startBgm() async {
-    if (isMuted) return;
+    if (isMuted || _bgmStarted) return;
     try {
+      _bgmStarted = true;
       await _bgmPlayer.setReleaseMode(ReleaseMode.loop);
-      await _bgmPlayer.setVolume(0.28);
+      await _bgmPlayer.setVolume(0.25);
       await _bgmPlayer.play(BytesSource(_bgmWav));
-    } catch (_) {}
+    } catch (_) {
+      _bgmStarted = false;
+    }
   }
 
   Future<void> toggleMute() async {
@@ -59,12 +92,14 @@ class SoundEngine {
     if (isMuted) {
       await _bgmPlayer.pause();
     } else {
+      _bgmStarted = false;
       await startBgm();
     }
   }
 
   void playClick() => _playSfx(_clickWav);
   void playPour() => _playSfx(_pourWav);
+  void playBottleDone() => _playSfx(_bottleDoneWav);
   void playWin() => _playSfx(_winWav);
   void playLose() => _playSfx(_loseWav);
 
@@ -76,12 +111,6 @@ class SoundEngine {
     } catch (_) {}
   }
 
-  void dispose() {
-    _bgmPlayer.dispose();
-    _sfxPlayer.dispose();
-  }
-
-  // WAV Header & PCM Generator
   Uint8List _encodeWav(List<int> samples, int sampleRate) {
     final byteData = ByteData(44 + samples.length * 2);
     void writeStr(int offset, String s) {
@@ -147,7 +176,6 @@ class SoundEngine {
     return _encodeWav(all, sr);
   }
 
-  // အေးအေးဆေးဆေး နားထောင်ကောင်းမယ့် Pentatonic Ambient BGM
   Uint8List _generateChillBgm() {
     const sr = 16000;
     final notes = [261.63, 329.63, 392.00, 440.00, 392.00, 329.63, 293.66, 392.00];
@@ -166,8 +194,329 @@ class SoundEngine {
   }
 }
 
+class ColorSortApp extends StatelessWidget {
+  const ColorSortApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Color Sort Pro',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0F172A),
+      ),
+      home: const HomeScreen(),
+    );
+  }
+}
+
+/// ================= HOME SCREEN (START MENU) =================
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int savedLevel = 1;
+  int coins = 50;
+  int selectedThemeIndex = 0;
+  List<String> unlockedThemes = ['0'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+    SoundEngine.instance.startBgm();
+  }
+
+  Future<void> _loadData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      savedLevel = prefs.getInt('saved_level') ?? 1;
+      coins = prefs.getInt('coins') ?? 50;
+      selectedThemeIndex = prefs.getInt('selected_theme') ?? 0;
+      unlockedThemes = prefs.getStringList('unlocked_themes') ?? ['0'];
+    });
+  }
+
+  void _openThemeShop() {
+    SoundEngine.instance.playClick();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'THEME SHOP 🎨',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.amber),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.monetization_on, color: Colors.amber, size: 18),
+                            const SizedBox(width: 6),
+                            Text('$coins', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  ...List.generate(appThemes.length, (i) {
+                    final theme = appThemes[i];
+                    final isUnlocked = unlockedThemes.contains(i.toString());
+                    final isSelected = selectedThemeIndex == i;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: theme.bgGradient),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSelected ? theme.accentColor : Colors.white24,
+                          width: isSelected ? 2.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            theme.name,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isSelected
+                                  ? Colors.white24
+                                  : (isUnlocked ? theme.accentColor : Colors.amber),
+                              foregroundColor: isSelected ? Colors.white : Colors.black,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: () async {
+                              final prefs = await SharedPreferences.getInstance();
+                              if (isUnlocked) {
+                                SoundEngine.instance.playClick();
+                                await prefs.setInt('selected_theme', i);
+                                setState(() => selectedThemeIndex = i);
+                                setModalState(() {});
+                              } else if (coins >= theme.price) {
+                                SoundEngine.instance.playWin();
+                                coins -= theme.price;
+                                unlockedThemes.add(i.toString());
+                                await prefs.setInt('coins', coins);
+                                await prefs.setStringList('unlocked_themes', unlockedThemes);
+                                await prefs.setInt('selected_theme', i);
+                                setState(() => selectedThemeIndex = i);
+                                setModalState(() {});
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Coins မလောက်သေးပါ။ Level တွေ ထပ်ဆော့ပြီး စုပါ။')),
+                                );
+                              }
+                            },
+                            child: Text(
+                              isSelected
+                                  ? 'Equipped'
+                                  : (isUnlocked ? 'Use' : '${theme.price} 🪙'),
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = appThemes[selectedThemeIndex];
+
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: theme.bgGradient,
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Top Bar
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.amber.withOpacity(0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.monetization_on, color: Colors.amber, size: 20),
+                          const SizedBox(width: 6),
+                          Text(
+                            '$coins',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        SoundEngine.instance.isMuted ? Icons.volume_off : Icons.volume_up,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                      onPressed: () async {
+                        await SoundEngine.instance.toggleMute();
+                        setState(() {});
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              const Spacer(),
+
+              // Logo Title
+              Icon(Icons.water_drop_rounded, size: 80, color: theme.accentColor),
+              const SizedBox(height: 16),
+              const Text(
+                'COLOR SORT',
+                style: TextStyle(
+                  fontSize: 38,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 4,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                'PUZZLE PRO',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 6,
+                  color: theme.accentColor,
+                ),
+              ),
+
+              const SizedBox(height: 50),
+
+              // PLAY Button
+              GestureDetector(
+                onTap: () async {
+                  HapticFeedback.mediumImpact();
+                  SoundEngine.instance.playClick();
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => GameScreen(theme: theme),
+                    ),
+                  );
+                  _loadData(); // ပြန်ထွက်လာရင် Coins နဲ့ Level Update လုပ်မယ်
+                },
+                child: Container(
+                  width: 230,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [theme.accentColor, theme.accentColor.withOpacity(0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.accentColor.withOpacity(0.5),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'PLAY',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.black,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      Text(
+                        'LEVEL $savedLevel',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Theme Shop Button
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white38, width: 1.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                ),
+                onPressed: _openThemeShop,
+                icon: const Icon(Icons.palette_outlined),
+                label: const Text('THEMES SHOP', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+
+              const Spacer(flex: 2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ================= GAME SCREEN =================
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key});
+  final AppThemeData theme;
+  const GameScreen({super.key, required this.theme});
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -177,20 +526,21 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   static const int maxCapacity = 4;
 
   final List<Color> palette = [
-    const Color(0xFFFF3366), // Neon Red
-    const Color(0xFF00D2FF), // Cyan Blue
-    const Color(0xFF00E676), // Emerald Green
-    const Color(0xFFFFD166), // Warm Yellow
-    const Color(0xFF9D4EDD), // Royal Purple
-    const Color(0xFFFF7B00), // Bright Orange
-    const Color(0xFF2EC4B6), // Teal
-    const Color(0xFFF72585), // Hot Pink
+    const Color(0xFFFF3366),
+    const Color(0xFF00D2FF),
+    const Color(0xFF00E676),
+    const Color(0xFFFFD166),
+    const Color(0xFF9D4EDD),
+    const Color(0xFFFF7B00),
+    const Color(0xFF2EC4B6),
+    const Color(0xFFF72585),
   ];
 
-  late SoundEngine sound;
   late AnimationController _waveController;
+  late AnimationController _confettiController;
 
   int currentLevel = 1;
+  int coins = 50;
   List<List<Color>> bottles = [];
   List<List<List<Color>>> history = [];
 
@@ -199,8 +549,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int? hintFromIndex;
   int? hintToIndex;
   bool extraBottleUsed = false;
+  bool showConfetti = false;
 
-  // Timer & Lose State
   Timer? _countdownTimer;
   int timeLeft = 60;
   bool isGameOver = false;
@@ -208,35 +558,44 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    sound = SoundEngine();
     _waveController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat();
 
-    _loadSavedLevel();
+    _confettiController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    );
+
+    _loadGameData();
   }
 
   @override
   void dispose() {
     _countdownTimer?.cancel();
     _waveController.dispose();
-    sound.dispose();
+    _confettiController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadSavedLevel() async {
+  Future<void> _loadGameData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       currentLevel = prefs.getInt('saved_level') ?? 1;
+      coins = prefs.getInt('coins') ?? 50;
     });
     _initLevel(currentLevel);
-    sound.startBgm();
   }
 
-  Future<void> _saveLevel(int level) async {
+  Future<void> _saveProgress(int level, int newCoins) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('saved_level', level);
+    await prefs.setInt('coins', newCoins);
+  }
+
+  bool _isBottleComplete(List<Color> bottle) {
+    return bottle.length == maxCapacity && bottle.every((c) => c == bottle.first);
   }
 
   void _initLevel(int level) {
@@ -258,7 +617,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       newBottles.add(allDrops.sublist(i * maxCapacity, (i + 1) * maxCapacity));
     }
 
-    // ဖန်ခွက်အလွတ် ၂ ခွက်
     newBottles.add([]);
     newBottles.add([]);
 
@@ -271,7 +629,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       hintToIndex = null;
       extraBottleUsed = false;
       isGameOver = false;
-      timeLeft = 45 + (numColors * 12); // Level မြင့်လေ အချိန်ပိုပေးမယ်
+      showConfetti = false;
+      timeLeft = 45 + (numColors * 12);
     });
 
     _startTimer();
@@ -292,7 +651,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _triggerGameOver() {
     if (isGameOver) return;
     setState(() => isGameOver = true);
-    sound.playLose();
+    HapticFeedback.heavyImpact();
+    SoundEngine.instance.playLose();
 
     showDialog(
       context: context,
@@ -327,7 +687,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: () {
-              // TODO: နောက်ပိုင်း AdMob Rewarded Ad ချိတ်မယ့်နေရာ
               Navigator.pop(context);
               setState(() {
                 isGameOver = false;
@@ -346,6 +705,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _onBottleTap(int index) {
     if (isGameOver || pouringBottleIndex != null) return;
 
+    // ပြည့်ပြီးသား အဖုံးပိတ်ခွက်ကို နှိပ်လို့မရအောင် ကာထားမယ်
+    if (_isBottleComplete(bottles[index])) return;
+
     setState(() {
       hintFromIndex = null;
       hintToIndex = null;
@@ -353,11 +715,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
     if (selectedBottleIndex == null) {
       if (bottles[index].isNotEmpty) {
-        sound.playClick();
+        HapticFeedback.lightImpact();
+        SoundEngine.instance.playClick();
         setState(() => selectedBottleIndex = index);
       }
     } else if (selectedBottleIndex == index) {
-      sound.playClick();
+      HapticFeedback.lightImpact();
+      SoundEngine.instance.playClick();
       setState(() => selectedBottleIndex = null);
     } else {
       _pourWater(selectedBottleIndex!, index);
@@ -378,23 +742,30 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (toBottle.isEmpty || toBottle.last == topColor) {
       history.add(bottles.map((b) => List<Color>.from(b)).toList());
 
-      // ဖန်ခွက်စောင်းပြီး လောင်းထည့်တဲ့ Animation
-      sound.playPour();
-      setState(() {
-        pouringBottleIndex = from;
-      });
+      HapticFeedback.mediumImpact();
+      SoundEngine.instance.playPour();
+      setState(() => pouringBottleIndex = from);
 
       await Future.delayed(const Duration(milliseconds: 220));
 
+      bool becameComplete = false;
       setState(() {
         while (fromBottle.isNotEmpty &&
             fromBottle.last == topColor &&
             toBottle.length < maxCapacity) {
           toBottle.add(fromBottle.removeLast());
         }
+        if (_isBottleComplete(toBottle)) {
+          becameComplete = true;
+        }
         selectedBottleIndex = null;
         pouringBottleIndex = null;
       });
+
+      if (becameComplete) {
+        HapticFeedback.heavyImpact();
+        SoundEngine.instance.playBottleDone();
+      }
 
       _checkWin();
     } else {
@@ -406,12 +777,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     bool won = true;
     for (var bottle in bottles) {
       if (bottle.isEmpty) continue;
-      if (bottle.length != maxCapacity) {
-        won = false;
-        break;
-      }
-      Color first = bottle.first;
-      if (!bottle.every((c) => c == first)) {
+      if (!_isBottleComplete(bottle)) {
         won = false;
         break;
       }
@@ -419,9 +785,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
     if (won) {
       _countdownTimer?.cancel();
-      sound.playWin();
+      HapticFeedback.heavyImpact();
+      SoundEngine.instance.playWin();
+
+      setState(() => showConfetti = true);
+      _confettiController.forward(from: 0);
+
       int nextLevel = currentLevel + 1;
-      _saveLevel(nextLevel);
 
       showDialog(
         context: context,
@@ -431,30 +801,63 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Column(
             children: [
-              Icon(Icons.emoji_events, color: Color(0xFFFFD166), size: 52),
+              Icon(Icons.emoji_events, color: Color(0xFFFFD166), size: 54),
               SizedBox(height: 8),
-              Text('LEVEL COMPLETE!', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('LEVEL COMPLETE!', style: TextStyle(fontWeight: FontWeight.w900)),
             ],
           ),
-          content: Text(
-            'Level $currentLevel ကို အောင်မြင်စွာ ဖြတ်ကျော်နိုင်ပါပြီ 🎉',
-            textAlign: TextAlign.center,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Level $currentLevel ကို အောင်မြင်စွာ ဖြတ်ကျော်နိုင်ပါပြီ 🎉', textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Text(
+                  'Reward: +20 🪙',
+                  style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+            ],
           ),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00D2FF),
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
+            TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                setState(() => currentLevel = nextLevel);
+                int updatedCoins = coins + 20;
+                _saveProgress(nextLevel, updatedCoins);
+                setState(() {
+                  currentLevel = nextLevel;
+                  coins = updatedCoins;
+                });
                 _initLevel(currentLevel);
               },
-              child: const Text('NEXT LEVEL', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text('Next (+20 🪙)', style: TextStyle(color: Colors.white70)),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () {
+                // TODO: AdMob Rewarded Ad for 2x Coins
+                Navigator.pop(context);
+                int updatedCoins = coins + 40;
+                _saveProgress(nextLevel, updatedCoins);
+                setState(() {
+                  currentLevel = nextLevel;
+                  coins = updatedCoins;
+                });
+                _initLevel(currentLevel);
+              },
+              icon: const Icon(Icons.play_circle_fill, size: 18),
+              label: const Text('2x (+40 🪙 Ad)', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -464,7 +867,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _undo() {
     if (history.isNotEmpty) {
-      sound.playClick();
+      HapticFeedback.lightImpact();
+      SoundEngine.instance.playClick();
       setState(() {
         bottles = history.removeLast();
         selectedBottleIndex = null;
@@ -472,23 +876,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  // Smart Hint (အကြံတောင်းခြင်း - Ad UI)
   void _useHint() {
-    // TODO: နောက်ပိုင်း AdMob Rewarded Ad ချိတ်မယ့်နေရာ
     int? bestFrom;
     int? bestTo;
 
     for (int i = 0; i < bottles.length; i++) {
-      if (bottles[i].isEmpty) continue;
-      // ပြည့်ပြီးသား အရောင်တူခွက်ကို မရွှေ့ဘူး
-      if (bottles[i].length == maxCapacity &&
-          bottles[i].every((c) => c == bottles[i].first)) continue;
-
+      if (bottles[i].isEmpty || _isBottleComplete(bottles[i])) continue;
       Color top = bottles[i].last;
       for (int j = 0; j < bottles.length; j++) {
         if (i == j || bottles[j].length >= maxCapacity) continue;
-
-        // အရောင်တူတဲ့ခွက်ထဲ လောင်းထည့်တာကို ဦးစားပေးမယ်
         if (bottles[j].isNotEmpty && bottles[j].last == top) {
           bestFrom = i;
           bestTo = j;
@@ -498,11 +894,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (bestFrom != null) break;
     }
 
-    // အရောင်တူမရှိရင် ခွက်အလွတ်ထဲ ရွှေ့ဖို့ ရှာမယ်
     if (bestFrom == null) {
       for (int i = 0; i < bottles.length; i++) {
-        if (bottles[i].isEmpty) continue;
-        if (bottles[i].every((c) => c == bottles[i].first)) continue;
+        if (bottles[i].isEmpty || bottles[i].every((c) => c == bottles[i].first)) continue;
         for (int j = 0; j < bottles.length; j++) {
           if (bottles[j].isEmpty) {
             bestFrom = i;
@@ -515,7 +909,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
 
     if (bestFrom != null && bestTo != null) {
-      sound.playClick();
+      HapticFeedback.mediumImpact();
+      SoundEngine.instance.playClick();
       setState(() {
         hintFromIndex = bestFrom;
         hintToIndex = bestTo;
@@ -534,8 +929,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       );
       return;
     }
-    // TODO: နောက်ပိုင်း AdMob Rewarded Ad ချိတ်မယ့်နေရာ
-    sound.playClick();
+    HapticFeedback.mediumImpact();
+    SoundEngine.instance.playClick();
     setState(() {
       bottles.add([]);
       extraBottleUsed = true;
@@ -547,149 +942,176 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     String timerText = '${(timeLeft ~/ 60).toString().padLeft(2, '0')}:${(timeLeft % 60).toString().padLeft(2, '0')}';
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF0F172A)],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Top Bar (Sound, Level, Timer, Restart)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        sound.isMuted ? Icons.volume_off : Icons.volume_up,
-                        color: Colors.white70,
-                      ),
-                      onPressed: () async {
-                        await sound.toggleMute();
-                        setState(() {});
-                      },
-                    ),
-                    Column(
+      body: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: widget.theme.bgGradient,
+              ),
+            ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  // Top Bar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'LEVEL $currentLevel',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 2,
-                            color: Colors.white,
-                          ),
+                        IconButton(
+                          icon: const Icon(Icons.home_rounded, color: Colors.white70, size: 28),
+                          onPressed: () => Navigator.pop(context),
                         ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: timeLeft <= 15
-                                ? const Color(0xFFFF3366).withOpacity(0.25)
-                                : Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: timeLeft <= 15 ? const Color(0xFFFF3366) : Colors.white24,
+                        Column(
+                          children: [
+                            Text(
+                              'LEVEL $currentLevel',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 2,
+                              ),
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.timer,
-                                size: 16,
-                                color: timeLeft <= 15 ? const Color(0xFFFF3366) : const Color(0xFF00D2FF),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                timerText,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: timeLeft <= 15 ? const Color(0xFFFF3366) : Colors.white,
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: timeLeft <= 15
+                                        ? const Color(0xFFFF3366).withOpacity(0.25)
+                                        : Colors.white.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: timeLeft <= 15 ? const Color(0xFFFF3366) : Colors.white24,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.timer,
+                                        size: 14,
+                                        color: timeLeft <= 15 ? const Color(0xFFFF3366) : widget.theme.accentColor,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        timerText,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: timeLeft <= 15 ? const Color(0xFFFF3366) : Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Text(
+                                    '$coins 🪙',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.amber),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh, color: Colors.white70, size: 26),
+                          onPressed: () => _initLevel(currentLevel),
                         ),
                       ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.refresh, color: Colors.white70),
-                      onPressed: () => _initLevel(currentLevel),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
 
-              // ဖန်ခွက်များ ပြသမယ့်နေရာ
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Wrap(
-                      spacing: 18,
-                      runSpacing: 28,
-                      alignment: WrapAlignment.center,
-                      children: List.generate(bottles.length, (index) => _buildBottle(index)),
+                  // ဖန်ခွက်များ
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Wrap(
+                          spacing: 18,
+                          runSpacing: 32,
+                          alignment: WrapAlignment.center,
+                          children: List.generate(bottles.length, (index) => _buildBottle(index)),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
 
-              // အောက်ခြေ ခလုတ်များ (Undo, Hint Ad, +1 Bottle Ad)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _actionButton(
-                      icon: Icons.undo,
-                      label: 'Undo',
-                      color: const Color(0xFF334155),
-                      onTap: _undo,
+                  // Action Buttons
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _actionButton(
+                          icon: Icons.undo,
+                          label: 'Undo',
+                          color: const Color(0xFF334155),
+                          onTap: _undo,
+                        ),
+                        _actionButton(
+                          icon: Icons.lightbulb,
+                          label: 'Hint',
+                          isAd: true,
+                          color: const Color(0xFFD97706),
+                          onTap: _useHint,
+                        ),
+                        _actionButton(
+                          icon: Icons.add_box_rounded,
+                          label: '+1 Bottle',
+                          isAd: true,
+                          color: const Color(0xFF0284C7),
+                          onTap: _addExtraBottle,
+                        ),
+                      ],
                     ),
-                    _actionButton(
-                      icon: Icons.lightbulb,
-                      label: 'Hint',
-                      isAd: true,
-                      color: const Color(0xFFD97706),
-                      onTap: _useHint,
-                    ),
-                    _actionButton(
-                      icon: Icons.add_box_rounded,
-                      label: '+1 Bottle',
-                      isAd: true,
-                      color: const Color(0xFF0284C7),
-                      onTap: _addExtraBottle,
-                    ),
-                  ],
-                ),
-              ),
+                  ),
 
-              // Banner Ad Placeholder UI (နောက်ပိုင်း AdMob Banner ထည့်မယ့်နေရာ)
-              Container(
-                height: 52,
-                width: double.infinity,
-                margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white12),
-                ),
-                alignment: Alignment.center,
-                child: const Text(
-                  'AD BANNER SPACE (AdMob Ready)',
-                  style: TextStyle(color: Colors.white38, fontSize: 12, letterSpacing: 1.2),
-                ),
+                  // Banner Ad Placeholder UI
+                  Container(
+                    height: 52,
+                    width: double.infinity,
+                    margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      'AD BANNER SPACE (AdMob Ready)',
+                      style: TextStyle(color: Colors.white38, fontSize: 12, letterSpacing: 1.2),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+
+          // Confetti Overlay on Win
+          if (showConfetti)
+            IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _confettiController,
+                builder: (context, child) {
+                  return CustomPaint(
+                    size: MediaQuery.of(context).size,
+                    painter: ConfettiPainter(progress: _confettiController.value),
+                  );
+                },
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -699,81 +1121,116 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     bool isPouring = pouringBottleIndex == index;
     bool isHint = hintFromIndex == index || hintToIndex == index;
     List<Color> colors = bottles[index];
+    bool isComplete = _isBottleComplete(colors);
 
     Color borderColor = Colors.white54;
-    if (isHint) {
+    if (isComplete) {
+      borderColor = const Color(0xFF00E676);
+    } else if (isHint) {
       borderColor = const Color(0xFFFFD166);
     } else if (isSelected) {
-      borderColor = const Color(0xFF00D2FF);
+      borderColor = widget.theme.accentColor;
     }
 
     return GestureDetector(
       onTap: () => _onBottleTap(index),
-      child: AnimatedRotation(
-        turns: isPouring ? 0.08 : 0.0,
-        duration: const Duration(milliseconds: 200),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutBack,
-          transform: Matrix4.translationValues(0, (isSelected || isPouring) ? -22 : 0, 0),
-          width: 58,
-          height: 174,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.06),
-            border: Border.all(
-              color: borderColor,
-              width: (isSelected || isHint) ? 3 : 2,
-            ),
-            boxShadow: (isSelected || isHint)
-                ? [BoxShadow(color: borderColor.withOpacity(0.45), blurRadius: 14, spreadRadius: 1)]
-                : [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
-            borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(26),
-              bottomRight: Radius.circular(26),
-              topLeft: Radius.circular(8),
-              topRight: Radius.circular(8),
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(24),
-              bottomRight: Radius.circular(24),
-              topLeft: Radius.circular(6),
-              topRight: Radius.circular(6),
-            ),
-            child: Stack(
-              children: [
-                // အရည်အရှင် (Liquid Wave CustomPainter)
-                AnimatedBuilder(
-                  animation: _waveController,
-                  builder: (context, child) {
-                    return CustomPaint(
-                      size: const Size(58, 174),
-                      painter: LiquidBottlePainter(
-                        colors: colors,
-                        maxCapacity: maxCapacity,
-                        wavePhase: _waveController.value * 2 * pi,
-                      ),
-                    );
-                  },
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          AnimatedRotation(
+            turns: isPouring ? 0.08 : 0.0,
+            duration: const Duration(milliseconds: 200),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutBack,
+              transform: Matrix4.translationValues(0, (isSelected || isPouring) ? -22 : 0, 0),
+              width: 58,
+              height: 174,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.06),
+                border: Border.all(
+                  color: borderColor,
+                  width: (isSelected || isHint || isComplete) ? 3 : 2,
                 ),
-                // ဖန်ခွက် မှန်ရောင်ပြန် (Glass Highlight)
-                Positioned(
-                  left: 6,
-                  top: 12,
-                  bottom: 20,
-                  child: Container(
-                    width: 6,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.18),
-                      borderRadius: BorderRadius.circular(10),
+                boxShadow: (isSelected || isHint || isComplete)
+                    ? [BoxShadow(color: borderColor.withOpacity(0.45), blurRadius: 14, spreadRadius: 1)]
+                    : [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(26),
+                  bottomRight: Radius.circular(26),
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
+                  topLeft: Radius.circular(6),
+                  topRight: Radius.circular(6),
+                ),
+                child: Stack(
+                  children: [
+                    AnimatedBuilder(
+                      animation: _waveController,
+                      builder: (context, child) {
+                        return CustomPaint(
+                          size: const Size(58, 174),
+                          painter: LiquidBottlePainter(
+                            colors: colors,
+                            maxCapacity: maxCapacity,
+                            wavePhase: _waveController.value * 2 * pi,
+                          ),
+                        );
+                      },
                     ),
-                  ),
+                    // Glass Highlight
+                    Positioned(
+                      left: 6,
+                      top: 12,
+                      bottom: 20,
+                      child: Container(
+                        width: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    // Complete Checkmark Overlay
+                    if (isComplete)
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.45),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.check, color: Color(0xFF00E676), size: 24),
+                        ),
+                      ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+
+          // ဖန်ခွက်ပြည့်သွားရင် အပေါ်မှာ အဖုံး (Cork) ပိတ်သွားမယ့် Effect
+          if (isComplete)
+            Positioned(
+              top: -12,
+              child: Container(
+                width: 34,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD97706),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                  border: Border.all(color: const Color(0xFFFFD166), width: 1.5),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -830,7 +1287,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 }
 
-/// ဖန်ခွက်ထဲက ရေလှိုင်း Animation ဆွဲပေးမယ့် CustomPainter
 class LiquidBottlePainter extends CustomPainter {
   final List<Color> colors;
   final int maxCapacity;
@@ -858,7 +1314,6 @@ class LiquidBottlePainter extends CustomPainter {
       if (!isTopLayer) {
         canvas.drawRect(Rect.fromLTRB(0, topY, size.width, bottomY + 1), paint);
       } else {
-        // အပေါ်ဆုံးအလွှာကို ရေလှိုင်းပုံစံ (Sine Wave) ဆွဲမယ်
         final path = Path();
         path.moveTo(0, bottomY + 1);
         path.lineTo(0, topY);
@@ -877,4 +1332,42 @@ class LiquidBottlePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant LiquidBottlePainter oldDelegate) => true;
+}
+
+/// Level နိုင်သွားရင် ကျလာမယ့် စက္ကူရောင်စုံ (Confetti Painter)
+class ConfettiPainter extends CustomPainter {
+  final double progress;
+  final Random _rng = Random(42);
+  final List<Color> _colors = [
+    const Color(0xFFFF3366),
+    const Color(0xFF00D2FF),
+    const Color(0xFF00E676),
+    const Color(0xFFFFD166),
+    const Color(0xFFE879F9),
+  ];
+
+  ConfettiPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (int i = 0; i < 65; i++) {
+      final startX = _rng.nextDouble() * size.width;
+      final speed = 0.6 + _rng.nextDouble() * 0.8;
+      final y = (progress * size.height * 1.4 * speed) - (_rng.nextDouble() * 200);
+      final x = startX + sin(progress * 10 + i) * 25;
+
+      if (y > 0 && y < size.height) {
+        final paint = Paint()
+          ..color = _colors[i % _colors.length].withOpacity((1 - progress).clamp(0.0, 1.0));
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.rotate(progress * 8 + i);
+        canvas.drawRect(const Rect.fromLTWH(-4, -4, 8, 12), paint);
+        canvas.restore();
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant ConfettiPainter oldDelegate) => true;
 }
