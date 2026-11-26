@@ -25,7 +25,16 @@ jobs:
 
       - name: Add AdMob Test App ID to AndroidManifest
         run: |
-          sed -i 's/<\/application>/<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"\/><\/application>/' android/app/src/main/AndroidManifest.xml
+          python3 -c '
+          p = "android/app/src/main/AndroidManifest.xml"
+          s = open(p).read()
+          tag = "<meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"ca-app-pub-3940256099942544~3347511713\"/>"
+          if "APPLICATION_ID" not in s:
+              s = s.replace("</application>", f"    {tag}\n    </application>")
+          if "android.permission.INTERNET" not in s:
+              s = s.replace("<application", "<uses-permission android:name=\"android.permission.INTERNET\"/>\n    <application", 1)
+          open(p, "w").write(s)
+          '
 
       - name: Disable Release Lint Check
         run: |
