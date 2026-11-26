@@ -6,9 +6,54 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await MobileAds.instance.initialize();
+  AdManager.loadRewarded();
   runApp(const ColorSortMasterApp());
+}
+
+/// ================= ADMOB MANAGER (TEST IDs) =================
+class AdManager {
+  // Play Store တင်ခါနီးမှ ကိုယ့် AdMob ID အစစ်တွေနဲ့ လဲထည့်ရန်
+  static const String bannerId = 'ca-app-pub-3940256099942544/6300978111';
+  static const String rewardedId = 'ca-app-pub-3940256099942544/5224354917';
+
+  static RewardedAd? _rewardedAd;
+
+  static void loadRewarded() {
+    RewardedAd.load(
+      adUnitId: rewardedId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) => _rewardedAd = ad,
+        onAdFailedToLoad: (err) => _rewardedAd = null,
+      ),
+    );
+  }
+
+  static void showRewarded(VoidCallback onEarned) {
+    if (_rewardedAd != null) {
+      _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
+        onAdDismissedFullScreenContent: (ad) {
+          ad.dispose();
+          loadRewarded();
+        },
+        onAdFailedToShowFullScreenContent: (ad, err) {
+          ad.dispose();
+          loadRewarded();
+        },
+      );
+      _rewardedAd!.show(onUserEarnedReward: (_, __) => onEarned());
+      _rewardedAd = null;
+    } else {
+      // ကြော်ငြာ Load မပြီးသေးရင် (သို့) Offline ဖြစ်နေရင် ဆုတန်းပေးပြီး နောက်တစ်ခါအတွက် ပြန် Load မယ်
+      onEarned();
+      loadRewarded();
+    }
+  }
 }
 
 /// ================= GLOBAL STATE & DATA =================
@@ -721,6 +766,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   bool extraUsed = false, paused = false, showConfetti = false;
   int moves = 0, timeLeft = 120, maxTime = 120;
   Timer? _timer;
+  BannerAd? _bannerAd;
+  bool _bannerReady = false;
 
   @override
   void initState() {
@@ -728,12 +775,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     level = widget.levelToPlay;
     _waveCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
     _confettiCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 3));
+    _bannerAd = BannerAd(
+      adUnitId: AdManager.bannerId,
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (_) => setState(() => _bannerReady = true),
+        onAdFailedToLoad: (ad, _) => ad.dispose(),
+      ),
+    )..load();
     _initLevel();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _bannerAd?.dispose();
     _waveCtrl.dispose();
     _confettiCtrl.dispose();
     super.dispose();
@@ -963,11 +1020,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 onPressed: () {
-                  GameData.coins += reward * 2;
-                  GameData.save();
-                  Navigator.pop(context);
-                  setState(() => level++);
-                  _initLevel();
+                  AdManager.showRewarded(() {
+                    GameData.coins += reward * 2;
+                    GameData.save();
+                    Navigator.pop(context);
+                    setState(() => level++);
+                    _initLevel();
+                  });
                 },
                 icon: const Icon(Icons.ondemand_video_rounded),
                 label: const Text('DOUBLE COINS x2 (Watch Ad)', style: TextStyle(fontWeight: FontWeight.w900)),
@@ -1032,9 +1091,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E676), foregroundColor: Colors.black),
             onPressed: () {
-              // TODO: AdMob Rewarded Ad
               Navigator.pop(context);
-              onGranted();
+              AdManager.showRewarded(onGranted);
             },
             icon: const Icon(Icons.play_circle_fill, size: 18),
             label: const Text('Watch Ad (Free)'),
@@ -1181,6 +1239,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       ],
                     ),
                   ),
+                  if (_bannerReady && _bannerAd != null)
+                    SizedBox(
+                      height: _bannerAd!.size.height.toDouble(),
+                      width: _bannerAd!.size.width.toDouble(),
+                      child: AdWidget(ad: _bannerAd!),
+                    ),
                 ],
               ),
             ),
@@ -2000,12 +2064,14 @@ class EventsTab extends StatelessWidget {
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
                     onPressed: () {
-                      final prize = [20, 50, 100, 200][Random().nextInt(4)];
-                      GameData.coins += prize;
-                      GameData.save();
-                      SoundEngine.instance.win();
-                      onRefresh();
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('You won +$prize Coins! 🎉')));
+                      AdManager.showRewarded(() {
+                        final prize = [20, 50, 100, 200][Random().nextInt(4)];
+                        GameData.coins += prize;
+                        GameData.save();
+                        SoundEngine.instance.win();
+                        onRefresh();
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('You won +$prize Coins! 🎉')));
+                      });
                     },
                     child: const Text('SPIN NOW (AD)', style: TextStyle(fontWeight: FontWeight.w900)),
                   ),
