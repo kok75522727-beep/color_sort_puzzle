@@ -1571,7 +1571,7 @@ class _ShopTabState extends State<ShopTab> {
                 context: context,
                 builder: (_) => AlertDialog(
                   backgroundColor: const Color(0xFF131B3E),
-                  title: const Text('Remove Ads ($1.99)'),
+                  title: const Text('Remove Ads (\$1.99)'),
                   content: const Text('Google Play Billing will be activated once published on Play Store!'),
                   actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
                 ),
