@@ -11,8 +11,10 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await MobileAds.instance.initialize();
-  AdManager.loadRewarded();
+  try {
+    await MobileAds.instance.initialize();
+    AdManager.loadRewarded();
+  } catch (_) {}
   runApp(const ColorSortMasterApp());
 }
 
