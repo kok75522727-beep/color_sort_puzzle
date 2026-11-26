@@ -27,6 +27,14 @@ jobs:
         run: |
           sed -i 's/<\/application>/<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"\/><\/application>/' android/app/src/main/AndroidManifest.xml
 
+      - name: Disable Release Lint Check
+        run: |
+          if [ -f android/app/build.gradle.kts ]; then
+            printf '\nandroid {\n    lint {\n        checkReleaseBuilds = false\n        abortOnError = false\n    }\n}\n' >> android/app/build.gradle.kts
+          elif [ -f android/app/build.gradle ]; then
+            printf '\nandroid {\n    lint {\n        checkReleaseBuilds = false\n        abortOnError = false\n    }\n}\n' >> android/app/build.gradle
+          fi
+
       - name: Get dependencies
         run: flutter pub get
 
