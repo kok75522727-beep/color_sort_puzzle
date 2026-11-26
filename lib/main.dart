@@ -9,12 +9,8 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await MobileAds.instance.initialize();
-    AdManager.loadRewarded();
-  } catch (_) {}
   runApp(const ColorSortMasterApp());
 }
 
@@ -295,6 +291,12 @@ class _MainShellState extends State<MainShell> {
     GameData.load().then((_) {
       setState(() => _loaded = true);
       SoundEngine.instance.startBgm();
+    });
+    Future.delayed(const Duration(seconds: 1), () async {
+      try {
+        await MobileAds.instance.initialize();
+        AdManager.loadRewarded();
+      } catch (_) {}
     });
   }
 
