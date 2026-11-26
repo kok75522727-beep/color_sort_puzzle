@@ -1,4 +1,5 @@
-descriptionleriptionium:description_puzdescriptioncription: A premium Color Sort Puzzle game.
+name: color_sort_puzzle
+description: A premium Color Sort Puzzle game.
 publish_to: 'none'
 version: 1.0.0+1
 
