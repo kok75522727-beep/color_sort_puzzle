@@ -151,8 +151,19 @@ class SoundEngine {
 
   final AudioPlayer _bgmPlayer = AudioPlayer();
 
+  bool _musicOn = true;
+
+  Future<void> setMusic(bool on) async {
+    _musicOn = on;
+    if (on) {
+      await startBgm();
+    } else {
+      await stopBgm();
+    }
+  }
+
   Future<void> startBgm() async {
-    if (!GameData.musicOn) return;
+    if (!_musicOn) return;
     try {
       await _bgmPlayer.setReleaseMode(ReleaseMode.loop);
       await _bgmPlayer.setVolume(0.35);
