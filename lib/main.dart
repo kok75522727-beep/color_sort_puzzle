@@ -1,1695 +1,523 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 void main() {
-  runApp(const ColorSortApp());
+  runApp(const ColorSortMasterApp());
 }
 
-/// ================= LANGUAGE HELPER (EN / MY) =================
-class Lang {
-  static bool isMy = false;
+/// ================= GLOBAL STATE & DATA =================
+class GameData {
+  static int level = 1;
+  static int coins = 500;
+  static int undoCount = 3;
+  static int hintCount = 3;
+  static int tubeCount = 2;
+  static int totalStars = 0;
+  static int dailyDay = 1;
+  static String lastDailyDate = '';
+  static int selectedTheme = 0;
+  static List<String> unlockedThemes = ['0'];
+  static bool isMyanmar = false;
+  static bool notificationsOn = true;
 
-  static String t(String key) {
-    final map = isMy ? _my : _en;
-    return map[key] ?? key;
+  static Future<void> load() async {
+    final p = await SharedPreferences.getInstance();
+    level = p.getInt('lv') ?? 1;
+    coins = p.getInt('coins') ?? 500;
+    undoCount = p.getInt('undo') ?? 3;
+    hintCount = p.getInt('hint') ?? 3;
+    tubeCount = p.getInt('tube') ?? 2;
+    totalStars = p.getInt('stars') ?? 0;
+    dailyDay = p.getInt('daily_day') ?? 1;
+    lastDailyDate = p.getString('daily_date') ?? '';
+    selectedTheme = p.getInt('theme') ?? 0;
+    unlockedThemes = p.getStringList('unlocked_themes') ?? ['0'];
+    isMyanmar = p.getBool('is_my') ?? false;
+    notificationsOn = p.getBool('notif') ?? true;
+    SoundEngine.instance.musicOn = p.getBool('music') ?? true;
+    SoundEngine.instance.sfxOn = p.getBool('sfx') ?? true;
+    SoundEngine.instance.vibOn = p.getBool('vib') ?? true;
   }
 
-  static const Map<String, String> _en = {
-    'play': 'PLAY',
-    'level': 'LEVEL',
-    'shop': 'SHOP',
-    'daily': 'DAILY',
-    'themes': 'THEMES',
-    'bottles': 'BOTTLES',
-    'equipped': 'Equipped',
-    'use': 'Use',
-    'not_enough_coins': 'Not enough coins! Play more levels.',
-    'undo': 'Undo',
-    'hint': 'Hint',
-    'add_bottle': '+1 Bottle',
-    'times_up': 'Time\'s Up! 😢',
-    'times_up_msg': 'Out of time! Watch an Ad for +30s?',
-    'no_moves': 'No Moves Left! 🤯',
-    'no_moves_msg': 'You are stuck! Add an extra bottle to continue.',
-    'retry': 'Retry',
-    'level_complete': 'LEVEL COMPLETE!',
-    'reward': 'Reward',
-    'next': 'Next',
-    'settings': 'SETTINGS',
-    'music': 'Background Music',
-    'sfx': 'Sound Effects',
-    'vibration': 'Vibration',
-    'privacy': 'Privacy Policy',
-    'privacy_msg': 'We respect your privacy. Game progress and coins are stored locally on your device. Ads may be served by Google AdMob.',
-    'close': 'Close',
-    'daily_title': 'DAILY REWARD 🎁',
-    'daily_claimed': 'Come back tomorrow for your next reward!',
-    'claim': 'Claim +50 🪙',
-    'claim_2x': '2x (+100 🪙 Ad)',
-    'extra_used': 'Extra bottle already used for this level!',
-    'mystery_badge': 'MYSTERY MODE',
-  };
+  static Future<void> save() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('lv', level);
+    await p.setInt('coins', coins);
+    await p.setInt('undo', undoCount);
+    await p.setInt('hint', hintCount);
+    await p.setInt('tube', tubeCount);
+    await p.setInt('stars', totalStars);
+    await p.setInt('daily_day', dailyDay);
+    await p.setString('daily_date', lastDailyDate);
+    await p.setInt('theme', selectedTheme);
+    await p.setStringList('unlocked_themes', unlockedThemes);
+    await p.setBool('is_my', isMyanmar);
+    await p.setBool('notif', notificationsOn);
+    await p.setBool('music', SoundEngine.instance.musicOn);
+    await p.setBool('sfx', SoundEngine.instance.sfxOn);
+    await p.setBool('vib', SoundEngine.instance.vibOn);
+  }
 
-  static const Map<String, String> _my = {
-    'play': 'ကစားမည်',
-    'level': 'အဆင့်',
-    'shop': 'ဆိုင်',
-    'daily': 'လက်ဆောင်',
-    'themes': 'နောက်ခံများ',
-    'bottles': 'ပုလင်းပုံစံ',
-    'equipped': 'သုံးနေသည်',
-    'use': 'ရွေးမည်',
-    'not_enough_coins': 'Coins မလောက်သေးပါ။ Level တွေ ထပ်ဆော့ပြီး စုပါ။',
-    'undo': 'နောက်ပြန်',
-    'hint': 'အကြံယူ',
-    'add_bottle': '+၁ ခွက်',
-    'times_up': 'အချိန်ပြည့်သွားပြီ 😢',
-    'times_up_msg': 'ကြော်ငြာကြည့်ပြီး အချိန် +30s ထပ်ယူမလား?',
-    'no_moves': 'ရွှေ့စရာမရှိတော့ပါ 🤯',
-    'no_moves_msg': 'ပိတ်မိသွားပါပြီ။ ဖန်ခွက်အပိုယူပြီး ဆက်ဆော့မလား?',
-    'retry': 'ပြန်ဆော့မည်',
-    'level_complete': 'အောင်မြင်ပါပြီ!',
-    'reward': 'ဆုကြေး',
-    'next': 'နောက်အဆင့်',
-    'settings': 'ဆက်တင်များ',
-    'music': 'နောက်ခံတီးလုံး',
-    'sfx': 'ဂိမ်းအသံများ',
-    'vibration': 'တုန်ခါမှု (Vibration)',
-    'privacy': 'Privacy Policy',
-    'privacy_msg': 'သင့်ကိုယ်ရေးအချက်အလက်ကို လေးစားပါသည်။ Level နှင့် Coins များကို သင့်ဖုန်းထဲတွင်သာ သိမ်းဆည်းထားပါသည်။',
-    'close': 'ပိတ်မည်',
-    'daily_title': 'နေ့စဉ်လက်ဆောင် 🎁',
-    'daily_claimed': 'ဒီနေ့အတွက် ယူပြီးပါပြီ။ မနက်ဖြန် ပြန်လာယူပါ။',
-    'claim': 'ယူမည် (+50 🪙)',
-    'claim_2x': '၂ ဆယူ (+100 🪙 Ad)',
-    'extra_used': 'ဒီ Level အတွက် ဖန်ခွက်အပို ယူပြီးပါပြီ။',
-    'mystery_badge': 'လျှို့ဝှက်အရောင် (?)',
-  };
+  static bool get canClaimDaily {
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    return lastDailyDate != today;
+  }
 }
 
-/// ================= THEMES & BOTTLE SKINS =================
-class AppThemeData {
+class ThemeSkin {
   final String name;
   final int price;
-  final List<Color> bgGradient;
-  final Color accentColor;
-
-  const AppThemeData({
-    required this.name,
-    required this.price,
-    required this.bgGradient,
-    required this.accentColor,
-  });
+  final List<Color> bg;
+  final Color accent;
+  const ThemeSkin(this.name, this.price, this.bg, this.accent);
 }
 
-const List<AppThemeData> appThemes = [
-  AppThemeData(
-    name: 'Midnight Neon',
-    price: 0,
-    bgGradient: [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF0F172A)],
-    accentColor: Color(0xFF00D2FF),
-  ),
-  AppThemeData(
-    name: 'Galaxy Purple',
-    price: 100,
-    bgGradient: [Color(0xFF1A0B2E), Color(0xFF3B0764), Color(0xFF1A0B2E)],
-    accentColor: Color(0xFFE879F9),
-  ),
-  AppThemeData(
-    name: 'Sunset Glow',
-    price: 150,
-    bgGradient: [Color(0xFF2A0800), Color(0xFF7C2D12), Color(0xFF1C0A00)],
-    accentColor: Color(0xFFFF9F1C),
-  ),
-  AppThemeData(
-    name: 'Emerald Forest',
-    price: 200,
-    bgGradient: [Color(0xFF022C22), Color(0xFF064E3B), Color(0xFF022C22)],
-    accentColor: Color(0xFF34D399),
-  ),
+const List<ThemeSkin> kThemes = [
+  ThemeSkin('Neon Theme', 0, [Color(0xFF0A0E2A), Color(0xFF1A1048), Color(0xFF070B1E)], Color(0xFF00E5FF)),
+  ThemeSkin('Ocean Theme', 1000, [Color(0xFF021B35), Color(0xFF064273), Color(0xFF021426)], Color(0xFF38BDF8)),
+  ThemeSkin('Galaxy Theme', 2000, [Color(0xFF1A0633), Color(0xFF4A0E78), Color(0xFF120424)], Color(0xFFE879F9)),
+  ThemeSkin('Gold Theme', 5000, [Color(0xFF261A04), Color(0xFF5C3D06), Color(0xFF1A1202)], Color(0xFFFFD166)),
+  ThemeSkin('Forest Theme', 5000, [Color(0xFF02261B), Color(0xFF065F46), Color(0xFF021C14)], Color(0xFF34D399)),
+  ThemeSkin('Crystal Theme', 5000, [Color(0xFF0F172A), Color(0xFF334155), Color(0xFF0F172A)], Color(0xFF93C5FD)),
 ];
 
-class BottleSkinData {
-  final String name;
-  final int price;
-  final double bottomRadius;
-  final double topRadius;
-  final bool hasNeonGlow;
-
-  const BottleSkinData({
-    required this.name,
-    required this.price,
-    required this.bottomRadius,
-    required this.topRadius,
-    this.hasNeonGlow = false,
-  });
-}
-
-const List<BottleSkinData> bottleSkins = [
-  BottleSkinData(name: 'Classic Tube', price: 0, bottomRadius: 26, topRadius: 6),
-  BottleSkinData(name: 'Potion Flask', price: 100, bottomRadius: 34, topRadius: 12),
-  BottleSkinData(name: 'Crystal Box', price: 150, bottomRadius: 8, topRadius: 4),
-  BottleSkinData(name: 'Neon Cyber', price: 200, bottomRadius: 22, topRadius: 8, hasNeonGlow: true),
-];
-
-/// ================= SOUND & SETTINGS ENGINE =================
+/// ================= SOUND ENGINE =================
 class SoundEngine {
-  static final SoundEngine instance = SoundEngine._internal();
-  final AudioPlayer _bgmPlayer = AudioPlayer();
-  final AudioPlayer _sfxPlayer = AudioPlayer();
+  static final SoundEngine instance = SoundEngine._();
+  final AudioPlayer _bgm = AudioPlayer();
+  final AudioPlayer _sfx = AudioPlayer();
+  bool musicOn = true, sfxOn = true, vibOn = true, _started = false;
 
-  bool musicOn = true;
-  bool sfxOn = true;
-  bool vibrationOn = true;
-  bool _bgmStarted = false;
+  late Uint8List _bgmWav, _clickWav, _pourWav, _winWav, _loseWav;
 
-  late Uint8List _bgmWav;
-  late Uint8List _clickWav;
-  late Uint8List _pourWav;
-  late Uint8List _bottleDoneWav;
-  late Uint8List _winWav;
-  late Uint8List _loseWav;
-
-  SoundEngine._internal() {
-    _bgmWav = _generateChillBgm();
-    _clickWav = _generateTone(520, 0.08, volume: 0.35);
-    _pourWav = _generateSweep(300, 680, 0.25, volume: 0.4);
-    _bottleDoneWav = _generateMelody([659.25, 880.00], 0.10);
-    _winWav = _generateMelody([523.25, 659.25, 783.99, 1046.50], 0.14);
-    _loseWav = _generateMelody([392.00, 349.23, 311.13, 261.63], 0.22);
+  SoundEngine._() {
+    _bgmWav = _makeBgm();
+    _clickWav = _tone(540, 0.07, 0.35);
+    _pourWav = _sweep(320, 720, 0.22, 0.4);
+    _winWav = _melody([523.25, 659.25, 783.99, 1046.5], 0.13);
+    _loseWav = _melody([392.0, 349.23, 311.13, 261.63], 0.2);
   }
 
   Future<void> startBgm() async {
-    if (!musicOn || _bgmStarted) return;
+    if (!musicOn || _started) return;
     try {
-      _bgmStarted = true;
-      await _bgmPlayer.setReleaseMode(ReleaseMode.loop);
-      await _bgmPlayer.setVolume(0.25);
-      // ကိုယ်ပိုင် assets/audio/bgm.mp3 ရှိရင် အရင်ဖွင့်မယ်၊ မရှိရင် Built-in ဖွင့်မယ်
+      _started = true;
+      await _bgm.setReleaseMode(ReleaseMode.loop);
+      await _bgm.setVolume(0.25);
       try {
-        await _bgmPlayer.play(AssetSource('audio/bgm.mp3'));
+        await _bgm.play(AssetSource('audio/bgm.mp3'));
       } catch (_) {
-        await _bgmPlayer.play(BytesSource(_bgmWav));
+        await _bgm.play(BytesSource(_bgmWav));
       }
     } catch (_) {
-      _bgmStarted = false;
+      _started = false;
     }
   }
 
-  Future<void> setMusic(bool on) async {
-    musicOn = on;
-    if (!musicOn) {
-      await _bgmPlayer.pause();
+  Future<void> setMusic(bool v) async {
+    musicOn = v;
+    if (!v) {
+      await _bgm.pause();
     } else {
-      _bgmStarted = false;
+      _started = false;
       await startBgm();
     }
   }
 
-  void vibrateLight() {
-    if (vibrationOn) HapticFeedback.lightImpact();
+  void vib() {
+    if (vibOn) HapticFeedback.lightImpact();
   }
 
-  void vibrateMedium() {
-    if (vibrationOn) HapticFeedback.mediumImpact();
-  }
+  void click() => _play(_clickWav);
+  void pour() => _play(_pourWav);
+  void win() => _play(_winWav);
+  void lose() => _play(_loseWav);
 
-  void vibrateHeavy() {
-    if (vibrationOn) HapticFeedback.heavyImpact();
-  }
-
-  void playClick() => _playSfx(_clickWav);
-  void playPour() => _playSfx(_pourWav);
-  void playBottleDone() => _playSfx(_bottleDoneWav);
-  void playWin() => _playSfx(_winWav);
-  void playLose() => _playSfx(_loseWav);
-
-  Future<void> _playSfx(Uint8List bytes) async {
+  Future<void> _play(Uint8List b) async {
     if (!sfxOn) return;
     try {
-      await _sfxPlayer.stop();
-      await _sfxPlayer.play(BytesSource(bytes));
+      await _sfx.stop();
+      await _sfx.play(BytesSource(b));
     } catch (_) {}
   }
 
-  Uint8List _encodeWav(List<int> samples, int sampleRate) {
-    final byteData = ByteData(44 + samples.length * 2);
-    void writeStr(int offset, String s) {
-      for (int i = 0; i < s.length; i++) {
-        byteData.setUint8(offset + i, s.codeUnitAt(i));
+  Uint8List _wav(List<int> s, int sr) {
+    final d = ByteData(44 + s.length * 2);
+    void w(int o, String t) {
+      for (int i = 0; i < t.length; i++) {
+        d.setUint8(o + i, t.codeUnitAt(i));
       }
     }
-
-    writeStr(0, 'RIFF');
-    byteData.setUint32(4, 36 + samples.length * 2, Endian.little);
-    writeStr(8, 'WAVE');
-    writeStr(12, 'fmt ');
-    byteData.setUint32(16, 16, Endian.little);
-    byteData.setUint16(20, 1, Endian.little);
-    byteData.setUint16(22, 1, Endian.little);
-    byteData.setUint32(24, sampleRate, Endian.little);
-    byteData.setUint32(28, sampleRate * 2, Endian.little);
-    byteData.setUint16(32, 2, Endian.little);
-    byteData.setUint16(34, 16, Endian.little);
-    writeStr(36, 'data');
-    byteData.setUint32(40, samples.length * 2, Endian.little);
-
-    for (int i = 0; i < samples.length; i++) {
-      byteData.setInt16(44 + i * 2, samples[i].clamp(-32767, 32767), Endian.little);
+    w(0, 'RIFF'); d.setUint32(4, 36 + s.length * 2, Endian.little);
+    w(8, 'WAVE'); w(12, 'fmt '); d.setUint32(16, 16, Endian.little);
+    d.setUint16(20, 1, Endian.little); d.setUint16(22, 1, Endian.little);
+    d.setUint32(24, sr, Endian.little); d.setUint32(28, sr * 2, Endian.little);
+    d.setUint16(32, 2, Endian.little); d.setUint16(34, 16, Endian.little);
+    w(36, 'data'); d.setUint32(40, s.length * 2, Endian.little);
+    for (int i = 0; i < s.length; i++) {
+      d.setInt16(44 + i * 2, s[i].clamp(-32767, 32767), Endian.little);
     }
-    return byteData.buffer.asUint8List();
+    return d.buffer.asUint8List();
   }
 
-  Uint8List _generateTone(double freq, double dur, {double volume = 0.4}) {
+  Uint8List _tone(double f, double dur, double vol) {
     const sr = 22050;
-    final count = (sr * dur).toInt();
-    final samples = List<int>.generate(count, (i) {
-      final t = i / sr;
-      final env = (1 - i / count);
-      return (sin(2 * pi * freq * t) * 32767 * volume * env).toInt();
-    });
-    return _encodeWav(samples, sr);
+    final n = (sr * dur).toInt();
+    return _wav(List.generate(n, (i) => (sin(2 * pi * f * i / sr) * 32767 * vol * (1 - i / n)).toInt()), sr);
   }
 
-  Uint8List _generateSweep(double f1, double f2, double dur, {double volume = 0.4}) {
+  Uint8List _sweep(double f1, double f2, double dur, double vol) {
     const sr = 22050;
-    final count = (sr * dur).toInt();
-    final samples = List<int>.generate(count, (i) {
-      final progress = i / count;
-      final freq = f1 + (f2 - f1) * progress;
-      final env = sin(pi * progress);
-      return (sin(2 * pi * freq * (i / sr)) * 32767 * volume * env).toInt();
-    });
-    return _encodeWav(samples, sr);
+    final n = (sr * dur).toInt();
+    return _wav(List.generate(n, (i) {
+      final p = i / n;
+      return (sin(2 * pi * (f1 + (f2 - f1) * p) * i / sr) * 32767 * vol * sin(pi * p)).toInt();
+    }), sr);
   }
 
-  Uint8List _generateMelody(List<double> freqs, double noteDur) {
+  Uint8List _melody(List<double> fs, double dur) {
     const sr = 22050;
-    final List<int> all = [];
-    for (final f in freqs) {
-      final count = (sr * noteDur).toInt();
-      for (int i = 0; i < count; i++) {
-        final t = i / sr;
-        final env = (1 - i / count);
-        all.add((sin(2 * pi * f * t) * 32767 * 0.35 * env).toInt());
+    final all = <int>[];
+    for (final f in fs) {
+      final n = (sr * dur).toInt();
+      for (int i = 0; i < n; i++) {
+        all.add((sin(2 * pi * f * i / sr) * 32767 * 0.35 * (1 - i / n)).toInt());
       }
     }
-    return _encodeWav(all, sr);
+    return _wav(all, sr);
   }
 
-  Uint8List _generateChillBgm() {
+  Uint8List _makeBgm() {
     const sr = 16000;
-    final notes = [261.63, 329.63, 392.00, 440.00, 392.00, 329.63, 293.66, 392.00];
-    const noteDur = 0.65;
-    final List<int> all = [];
+    final notes = [261.63, 329.63, 392.0, 440.0, 392.0, 329.63, 293.66, 392.0];
+    final all = <int>[];
     for (final f in notes) {
-      final count = (sr * noteDur).toInt();
-      for (int i = 0; i < count; i++) {
-        final t = i / sr;
-        final env = sin(pi * (i / count));
-        final val = (sin(2 * pi * f * t) * 0.6 + sin(2 * pi * (f / 2) * t) * 0.4);
-        all.add((val * 32767 * 0.25 * env).toInt());
+      final n = (sr * 0.65).toInt();
+      for (int i = 0; i < n; i++) {
+        final v = sin(2 * pi * f * i / sr) * 0.6 + sin(2 * pi * (f / 2) * i / sr) * 0.4;
+        all.add((v * 32767 * 0.25 * sin(pi * i / n)).toInt());
       }
     }
-    return _encodeWav(all, sr);
+    return _wav(all, sr);
   }
 }
 
 /// ================= MAIN APP =================
-class ColorSortApp extends StatelessWidget {
-  const ColorSortApp({super.key});
+class ColorSortMasterApp extends StatelessWidget {
+  const ColorSortMasterApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Color Sort Pro',
+      title: 'Color Sort Puzzle Master',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0F172A),
-      ),
-      home: const HomeScreen(),
+      theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: const Color(0xFF0A0E2A)),
+      home: const MainShell(),
     );
   }
 }
 
-/// ================= ANIMATED BOKEH BACKGROUND =================
-class BokehBackground extends StatefulWidget {
-  final List<Color> gradient;
-  final Color accent;
-  final Widget child;
-
-  const BokehBackground({
-    super.key,
-    required this.gradient,
-    required this.accent,
-    required this.child,
-  });
+/// ================= MAIN SHELL (BOTTOM NAV: HOME, SHOP, RANK, EVENTS) =================
+class MainShell extends StatefulWidget {
+  const MainShell({super.key});
 
   @override
-  State<BokehBackground> createState() => _BokehBackgroundState();
+  State<MainShell> createState() => _MainShellState();
 }
 
-class _BokehBackgroundState extends State<BokehBackground> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
+class _MainShellState extends State<MainShell> {
+  int _tab = 0;
+  bool _loaded = false;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 12))..repeat();
+    GameData.load().then((_) {
+      setState(() => _loaded = true);
+      SoundEngine.instance.startBgm();
+    });
   }
 
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
+  void _refresh() => setState(() {});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: widget.gradient,
-        ),
-      ),
-      child: Stack(
-        children: [
-          AnimatedBuilder(
-            animation: _ctrl,
-            builder: (context, _) {
-              return CustomPaint(
-                size: MediaQuery.of(context).size,
-                painter: _BokehPainter(progress: _ctrl.value, color: widget.accent),
-              );
-            },
-          ),
-          widget.child,
-        ],
-      ),
-    );
-  }
-}
-
-class _BokehPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final Random _rng = Random(99);
-
-  _BokehPainter({required this.progress, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (int i = 0; i < 14; i++) {
-      final baseX = _rng.nextDouble() * size.width;
-      final baseY = _rng.nextDouble() * size.height;
-      final radius = 12.0 + _rng.nextDouble() * 34.0;
-      final dy = (baseY - progress * size.height * (0.3 + (i % 3) * 0.2)) % size.height;
-      final dx = baseX + sin(progress * 2 * pi + i) * 18;
-
-      final paint = Paint()
-        ..color = color.withOpacity(0.06 + (i % 3) * 0.02)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
-      canvas.drawCircle(Offset(dx, dy < 0 ? dy + size.height : dy), radius, paint);
+    if (!_loaded) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-  }
+    final theme = kThemes[GameData.selectedTheme];
 
-  @override
-  bool shouldRepaint(covariant _BokehPainter oldDelegate) => true;
-}
-
-/// ================= HOME SCREEN =================
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  int savedLevel = 1;
-  int coins = 50;
-  int selectedThemeIndex = 0;
-  int selectedBottleIndex = 0;
-  List<String> unlockedThemes = ['0'];
-  List<String> unlockedBottles = ['0'];
-  bool canClaimDaily = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateTime.now().toIso8601String().substring(0, 10);
-    final lastClaim = prefs.getString('last_daily_claim') ?? '';
-
-    Lang.isMy = prefs.getBool('is_myanmar') ?? false;
-    SoundEngine.instance.musicOn = prefs.getBool('music_on') ?? true;
-    SoundEngine.instance.sfxOn = prefs.getBool('sfx_on') ?? true;
-    SoundEngine.instance.vibrationOn = prefs.getBool('vib_on') ?? true;
-
-    setState(() {
-      savedLevel = prefs.getInt('saved_level') ?? 1;
-      coins = prefs.getInt('coins') ?? 50;
-      selectedThemeIndex = prefs.getInt('selected_theme') ?? 0;
-      selectedBottleIndex = prefs.getInt('selected_bottle') ?? 0;
-      unlockedThemes = prefs.getStringList('unlocked_themes') ?? ['0'];
-      unlockedBottles = prefs.getStringList('unlocked_bottles') ?? ['0'];
-      canClaimDaily = lastClaim != today;
-    });
-
-    SoundEngine.instance.startBgm();
-  }
-
-  Future<void> _toggleLanguage() async {
-    SoundEngine.instance.vibrateLight();
-    SoundEngine.instance.playClick();
-    final prefs = await SharedPreferences.getInstance();
-    setState(() => Lang.isMy = !Lang.isMy);
-    await prefs.setBool('is_myanmar', Lang.isMy);
-  }
-
-  void _openDailyReward() {
-    SoundEngine.instance.vibrateLight();
-    SoundEngine.instance.playClick();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: Text(Lang.t('daily_title'), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
-        content: Text(
-          canClaimDaily ? '+50 🪙' : Lang.t('daily_claimed'),
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: canClaimDaily ? 28 : 15,
-            fontWeight: FontWeight.bold,
-            color: canClaimDaily ? Colors.amber : Colors.white70,
-          ),
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: theme.bg),
         ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: canClaimDaily
-            ? [
-                TextButton(
-                  onPressed: () async {
-                    final prefs = await SharedPreferences.getInstance();
-                    final today = DateTime.now().toIso8601String().substring(0, 10);
-                    coins += 50;
-                    await prefs.setInt('coins', coins);
-                    await prefs.setString('last_daily_claim', today);
-                    SoundEngine.instance.playWin();
-                    setState(() => canClaimDaily = false);
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  child: Text(Lang.t('claim'), style: const TextStyle(color: Colors.white70)),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
-                  onPressed: () async {
-                    final prefs = await SharedPreferences.getInstance();
-                    final today = DateTime.now().toIso8601String().substring(0, 10);
-                    coins += 100;
-                    await prefs.setInt('coins', coins);
-                    await prefs.setString('last_daily_claim', today);
-                    SoundEngine.instance.playWin();
-                    setState(() => canClaimDaily = false);
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  child: Text(Lang.t('claim_2x'), style: const TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ]
-            : [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(Lang.t('close')),
-                ),
-              ],
+        child: IndexedStack(
+          index: _tab,
+          children: [
+            HomeTab(onRefresh: _refresh, onOpenShop: () => setState(() => _tab = 1)),
+            ShopTab(onRefresh: _refresh),
+            const RankTab(),
+            EventsTab(onRefresh: _refresh),
+          ],
+        ),
       ),
-    );
-  }
-
-  void _openSettings() {
-    SoundEngine.instance.vibrateLight();
-    SoundEngine.instance.playClick();
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-            title: Text(Lang.t('settings'), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SwitchListTile(
-                  title: Text(Lang.t('music')),
-                  value: SoundEngine.instance.musicOn,
-                  activeColor: const Color(0xFF00D2FF),
-                  onChanged: (val) async {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setBool('music_on', val);
-                    await SoundEngine.instance.setMusic(val);
-                    setDialogState(() {});
-                  },
-                ),
-                SwitchListTile(
-                  title: Text(Lang.t('sfx')),
-                  value: SoundEngine.instance.sfxOn,
-                  activeColor: const Color(0xFF00D2FF),
-                  onChanged: (val) async {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setBool('sfx_on', val);
-                    SoundEngine.instance.sfxOn = val;
-                    setDialogState(() {});
-                  },
-                ),
-                SwitchListTile(
-                  title: Text(Lang.t('vibration')),
-                  value: SoundEngine.instance.vibrationOn,
-                  activeColor: const Color(0xFF00D2FF),
-                  onChanged: (val) async {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setBool('vib_on', val);
-                    SoundEngine.instance.vibrationOn = val;
-                    setDialogState(() {});
-                  },
-                ),
-                const Divider(color: Colors.white24),
-                TextButton.icon(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        backgroundColor: const Color(0xFF0F172A),
-                        title: Text(Lang.t('privacy')),
-                        content: Text(Lang.t('privacy_msg')),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(context), child: Text(Lang.t('close'))),
-                        ],
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.privacy_tip_outlined, color: Colors.white70),
-                  label: Text(Lang.t('privacy'), style: const TextStyle(color: Colors.white70)),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: Text(Lang.t('close'))),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _openShop() {
-    SoundEngine.instance.vibrateLight();
-    SoundEngine.instance.playClick();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) {
-        int tab = 0; // 0 = Themes, 1 = Bottles
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('${Lang.t('shop')} 🛍️', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.amber),
-                        ),
-                        child: Text('$coins 🪙', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amber)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: tab == 0 ? const Color(0xFF00D2FF) : Colors.white12,
-                            foregroundColor: tab == 0 ? Colors.black : Colors.white,
-                          ),
-                          onPressed: () => setModalState(() => tab = 0),
-                          child: Text(Lang.t('themes'), style: const TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: tab == 1 ? const Color(0xFF00D2FF) : Colors.white12,
-                            foregroundColor: tab == 1 ? Colors.black : Colors.white,
-                          ),
-                          onPressed: () => setModalState(() => tab = 1),
-                          child: Text(Lang.t('bottles'), style: const TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  if (tab == 0)
-                    ...List.generate(appThemes.length, (i) {
-                      final theme = appThemes[i];
-                      final isUnlocked = unlockedThemes.contains(i.toString());
-                      final isSelected = selectedThemeIndex == i;
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: theme.bgGradient),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: isSelected ? theme.accentColor : Colors.white24, width: isSelected ? 2 : 1),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(theme.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: isSelected ? Colors.white24 : (isUnlocked ? theme.accentColor : Colors.amber),
-                                foregroundColor: isSelected ? Colors.white : Colors.black,
-                              ),
-                              onPressed: () async {
-                                final prefs = await SharedPreferences.getInstance();
-                                if (isUnlocked) {
-                                  SoundEngine.instance.playClick();
-                                  await prefs.setInt('selected_theme', i);
-                                  setState(() => selectedThemeIndex = i);
-                                  setModalState(() {});
-                                } else if (coins >= theme.price) {
-                                  SoundEngine.instance.playWin();
-                                  coins -= theme.price;
-                                  unlockedThemes.add(i.toString());
-                                  await prefs.setInt('coins', coins);
-                                  await prefs.setStringList('unlocked_themes', unlockedThemes);
-                                  await prefs.setInt('selected_theme', i);
-                                  setState(() => selectedThemeIndex = i);
-                                  setModalState(() {});
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(Lang.t('not_enough_coins'))),
-                                  );
-                                }
-                              },
-                              child: Text(isSelected ? Lang.t('equipped') : (isUnlocked ? Lang.t('use') : '${theme.price} 🪙')),
-                            ),
-                          ],
-                        ),
-                      );
-                    })
-                  else
-                    ...List.generate(bottleSkins.length, (i) {
-                      final skin = bottleSkins[i];
-                      final isUnlocked = unlockedBottles.contains(i.toString());
-                      final isSelected = selectedBottleIndex == i;
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: isSelected ? const Color(0xFF00D2FF) : Colors.white24, width: isSelected ? 2 : 1),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(skin.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: isSelected ? Colors.white24 : (isUnlocked ? const Color(0xFF00D2FF) : Colors.amber),
-                                foregroundColor: isSelected ? Colors.white : Colors.black,
-                              ),
-                              onPressed: () async {
-                                final prefs = await SharedPreferences.getInstance();
-                                if (isUnlocked) {
-                                  SoundEngine.instance.playClick();
-                                  await prefs.setInt('selected_bottle', i);
-                                  setState(() => selectedBottleIndex = i);
-                                  setModalState(() {});
-                                } else if (coins >= skin.price) {
-                                  SoundEngine.instance.playWin();
-                                  coins -= skin.price;
-                                  unlockedBottles.add(i.toString());
-                                  await prefs.setInt('coins', coins);
-                                  await prefs.setStringList('unlocked_bottles', unlockedBottles);
-                                  await prefs.setInt('selected_bottle', i);
-                                  setState(() => selectedBottleIndex = i);
-                                  setModalState(() {});
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(Lang.t('not_enough_coins'))),
-                                  );
-                                }
-                              },
-                              child: Text(isSelected ? Lang.t('equipped') : (isUnlocked ? Lang.t('use') : '${skin.price} 🪙')),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                ],
-              ),
-            );
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D1433),
+          border: Border(top: BorderSide(color: theme.accent.withOpacity(0.35), width: 1.5)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _tab,
+          onTap: (i) {
+            SoundEngine.instance.vib();
+            SoundEngine.instance.click();
+            setState(() => _tab = i);
           },
-        );
-      },
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: theme.accent,
+          unselectedItemColor: Colors.white54,
+          items: [
+            BottomNavigationBarItem(icon: const Icon(Icons.home_rounded), label: GameData.isMyanmar ? 'ပင်မ' : 'Home'),
+            BottomNavigationBarItem(icon: const Icon(Icons.shopping_cart_rounded), label: GameData.isMyanmar ? 'ဆိုင်' : 'Shop'),
+            BottomNavigationBarItem(icon: const Icon(Icons.emoji_events_rounded), label: GameData.isMyanmar ? 'အဆင့်' : 'Rank'),
+            BottomNavigationBarItem(icon: const Icon(Icons.star_rounded), label: GameData.isMyanmar ? 'ပွဲများ' : 'Events'),
+          ],
+        ),
+      ),
     );
   }
+}
+
+/// ================= 1. HOME TAB =================
+class HomeTab extends StatelessWidget {
+  final VoidCallback onRefresh;
+  final VoidCallback onOpenShop;
+  const HomeTab({super.key, required this.onRefresh, required this.onOpenShop});
 
   @override
   Widget build(BuildContext context) {
-    final theme = appThemes[selectedThemeIndex];
-    final skin = bottleSkins[selectedBottleIndex];
+    final theme = kThemes[GameData.selectedTheme];
+    final isMy = GameData.isMyanmar;
 
-    return Scaffold(
-      body: BokehBackground(
-        gradient: theme.bgGradient,
-        accent: theme.accentColor,
-        child: SafeArea(
-          child: Column(
+    return SafeArea(
+      child: Column(
+        children: [
+          // Top Bar: Crown Lv | Coins + | Settings
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _pill(
+                  icon: Icons.workspace_premium,
+                  iconColor: Colors.amber,
+                  text: 'Lv.${GameData.level}',
+                ),
+                GestureDetector(
+                  onTap: onOpenShop,
+                  child: _pill(
+                    icon: Icons.monetization_on,
+                    iconColor: Colors.amber,
+                    text: '${GameData.coins}',
+                    trailing: const Icon(Icons.add_circle, color: Color(0xFF00E676), size: 20),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings, color: Colors.white, size: 28),
+                  onPressed: () async {
+                    SoundEngine.instance.click();
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                    onRefresh();
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          const Spacer(),
+
+          // 3 Glowing Tubes Logo
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Top Bar: Coins, Language Switcher, Settings
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.amber.withOpacity(0.5)),
-                      ),
-                      child: Text('$coins 🪙', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.amber)),
-                    ),
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: _toggleLanguage,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: theme.accentColor.withOpacity(0.6)),
-                            ),
-                            child: Text(
-                              Lang.isMy ? 'မြန်မာ 🇲🇲' : 'EN 🇺🇸',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.settings, color: Colors.white, size: 26),
-                          onPressed: _openSettings,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const Spacer(),
-
-              // Logo
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: theme.accentColor.withOpacity(0.12),
-                  boxShadow: [BoxShadow(color: theme.accentColor.withOpacity(0.35), blurRadius: 30)],
-                ),
-                child: Icon(Icons.science_rounded, size: 74, color: theme.accentColor),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'COLOR SORT',
-                style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900, letterSpacing: 4),
-              ),
-              Text(
-                'PUZZLE PRO',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 6, color: theme.accentColor),
-              ),
-
-              const SizedBox(height: 44),
-
-              // PLAY Button
-              GestureDetector(
-                onTap: () async {
-                  SoundEngine.instance.vibrateMedium();
-                  SoundEngine.instance.playClick();
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => GameScreen(theme: theme, skin: skin)),
-                  );
-                  _loadData();
-                },
-                child: Container(
-                  width: 240,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [theme.accentColor, theme.accentColor.withOpacity(0.75)]),
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [BoxShadow(color: theme.accentColor.withOpacity(0.5), blurRadius: 22, offset: const Offset(0, 8))],
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        Lang.t('play'),
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.black, letterSpacing: 2),
-                      ),
-                      Text(
-                        '${Lang.t('level')} $savedLevel',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 22),
-
-              // Shop & Daily Reward Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white38, width: 1.5),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                    ),
-                    onPressed: _openShop,
-                    icon: const Icon(Icons.storefront_rounded),
-                    label: Text(Lang.t('shop'), style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(width: 14),
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.amber,
-                          side: const BorderSide(color: Colors.amber, width: 1.5),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                        ),
-                        onPressed: _openDailyReward,
-                        icon: const Icon(Icons.card_giftcard_rounded),
-                        label: Text(Lang.t('daily'), style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      if (canClaimDaily)
-                        Positioned(
-                          top: -4,
-                          right: -4,
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: const BoxDecoration(color: Color(0xFFFF3366), shape: BoxShape.circle),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-
-              const Spacer(flex: 2),
+              _miniLogoTube(const Color(0xFF00E5FF), -0.06),
+              const SizedBox(width: 10),
+              _miniLogoTube(const Color(0xFFFF2E93), 0.0),
+              const SizedBox(width: 10),
+              _miniLogoTube(const Color(0xFFFFD166), 0.06),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
+          const SizedBox(height: 16),
 
-/// ================= GAME SCREEN =================
-class GameScreen extends StatefulWidget {
-  final AppThemeData theme;
-  final BottleSkinData skin;
-  const GameScreen({super.key, required this.theme, required this.skin});
-
-  @override
-  State<GameScreen> createState() => _GameScreenState();
-}
-
-class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
-  static const int maxCapacity = 4;
-
-  final List<Color> palette = [
-    const Color(0xFFFF3366),
-    const Color(0xFF00D2FF),
-    const Color(0xFF00E676),
-    const Color(0xFFFFD166),
-    const Color(0xFF9D4EDD),
-    const Color(0xFFFF7B00),
-    const Color(0xFF2EC4B6),
-    const Color(0xFFF72585),
-  ];
-
-  late AnimationController _waveController;
-  late AnimationController _confettiController;
-
-  int currentLevel = 1;
-  int coins = 50;
-  List<List<Color>> bottles = [];
-  List<List<bool>> revealed = []; // Mystery Mode (?) အတွက်
-  List<List<List<Color>>> history = [];
-
-  int? selectedBottleIndex;
-  int? pouringBottleIndex;
-  int? hintFromIndex;
-  int? hintToIndex;
-  bool extraBottleUsed = false;
-  bool showConfetti = false;
-  bool isMysteryLevel = false;
-
-  Timer? _countdownTimer;
-  int maxTime = 60;
-  int timeLeft = 60;
-  bool isGameOver = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-    _confettiController = AnimationController(vsync: this, duration: const Duration(seconds: 3));
-    _loadGameData();
-  }
-
-  @override
-  void dispose() {
-    _countdownTimer?.cancel();
-    _waveController.dispose();
-    _confettiController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadGameData() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      currentLevel = prefs.getInt('saved_level') ?? 1;
-      coins = prefs.getInt('coins') ?? 50;
-    });
-    _initLevel(currentLevel);
-  }
-
-  Future<void> _saveProgress(int level, int newCoins) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('saved_level', level);
-    await prefs.setInt('coins', newCoins);
-  }
-
-  bool _isBottleComplete(List<Color> bottle) {
-    return bottle.length == maxCapacity && bottle.every((c) => c == bottle.first);
-  }
-
-  void _initLevel(int level) {
-    _countdownTimer?.cancel();
-
-    int numColors = min(3 + (level ~/ 2), palette.length);
-    isMysteryLevel = level >= 5 && (level % 2 == 1); // Level 5, 7, 9... မှာ Mystery (?) ပါမယ်
-
-    List<Color> allDrops = [];
-    for (int i = 0; i < numColors; i++) {
-      for (int j = 0; j < maxCapacity; j++) {
-        allDrops.add(palette[i]);
-      }
-    }
-    allDrops.shuffle(Random());
-
-    List<List<Color>> newBottles = [];
-    List<List<bool>> newRevealed = [];
-    for (int i = 0; i < numColors; i++) {
-      newBottles.add(allDrops.sublist(i * maxCapacity, (i + 1) * maxCapacity));
-      // Mystery Level ဆိုရင် အပေါ်ဆုံးအလွှာပဲ ပြထားပြီး အောက်အလွှာတွေ ဖုံးထားမယ်
-      newRevealed.add(List.generate(maxCapacity, (idx) => !isMysteryLevel || idx == maxCapacity - 1));
-    }
-
-    newBottles.add([]);
-    newBottles.add([]);
-    newRevealed.add([]);
-    newRevealed.add([]);
-
-    maxTime = 50 + (numColors * 12);
-
-    setState(() {
-      bottles = newBottles;
-      revealed = newRevealed;
-      history.clear();
-      selectedBottleIndex = null;
-      pouringBottleIndex = null;
-      hintFromIndex = null;
-      hintToIndex = null;
-      extraBottleUsed = false;
-      isGameOver = false;
-      showConfetti = false;
-      timeLeft = maxTime;
-    });
-
-    _startTimer();
-  }
-
-  void _startTimer() {
-    _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (timeLeft > 0) {
-        setState(() => timeLeft--);
-      } else {
-        timer.cancel();
-        _triggerGameOver();
-      }
-    });
-  }
-
-  void _triggerGameOver() {
-    if (isGameOver) return;
-    setState(() => isGameOver = true);
-    SoundEngine.instance.vibrateHeavy();
-    SoundEngine.instance.playLose();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Column(
-          children: [
-            const Icon(Icons.timer_off, color: Color(0xFFFF3366), size: 48),
-            const SizedBox(height: 8),
-            Text(Lang.t('times_up'), style: const TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Text(Lang.t('times_up_msg'), textAlign: TextAlign.center),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _initLevel(currentLevel);
-            },
-            child: Text(Lang.t('retry'), style: const TextStyle(color: Colors.white70)),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E676), foregroundColor: Colors.black),
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                isGameOver = false;
-                timeLeft = 30;
-              });
-              _startTimer();
-            },
-            icon: const Icon(Icons.play_circle_fill),
-            label: const Text('+30s (Ad)', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _onBottleTap(int index) {
-    if (isGameOver || pouringBottleIndex != null) return;
-    if (_isBottleComplete(bottles[index])) return;
-
-    setState(() {
-      hintFromIndex = null;
-      hintToIndex = null;
-    });
-
-    if (selectedBottleIndex == null) {
-      if (bottles[index].isNotEmpty) {
-        SoundEngine.instance.vibrateLight();
-        SoundEngine.instance.playClick();
-        setState(() => selectedBottleIndex = index);
-      }
-    } else if (selectedBottleIndex == index) {
-      SoundEngine.instance.vibrateLight();
-      SoundEngine.instance.playClick();
-      setState(() => selectedBottleIndex = null);
-    } else {
-      _pourWater(selectedBottleIndex!, index);
-    }
-  }
-
-  Future<void> _pourWater(int from, int to) async {
-    List<Color> fromBottle = bottles[from];
-    List<Color> toBottle = bottles[to];
-
-    if (fromBottle.isEmpty || toBottle.length >= maxCapacity) {
-      setState(() => selectedBottleIndex = null);
-      return;
-    }
-
-    Color topColor = fromBottle.last;
-
-    if (toBottle.isEmpty || toBottle.last == topColor) {
-      history.add(bottles.map((b) => List<Color>.from(b)).toList());
-
-      SoundEngine.instance.vibrateMedium();
-      SoundEngine.instance.playPour();
-      setState(() => pouringBottleIndex = from);
-
-      await Future.delayed(const Duration(milliseconds: 200));
-
-      bool becameComplete = false;
-      setState(() {
-        while (fromBottle.isNotEmpty &&
-            fromBottle.last == topColor &&
-            toBottle.length < maxCapacity) {
-          toBottle.add(fromBottle.removeLast());
-          if (revealed[from].isNotEmpty) revealed[from].removeLast();
-          revealed[to].add(true);
-        }
-        // အပေါ်အရောင်ဖယ်လိုက်ရင် အောက်က Mystery (?) ကို ဖွင့်ပေးမယ်
-        if (revealed[from].isNotEmpty) {
-          revealed[from][revealed[from].length - 1] = true;
-        }
-        if (_isBottleComplete(toBottle)) {
-          becameComplete = true;
-        }
-        selectedBottleIndex = null;
-        pouringBottleIndex = null;
-      });
-
-      if (becameComplete) {
-        SoundEngine.instance.vibrateHeavy();
-        SoundEngine.instance.playBottleDone();
-      }
-
-      if (!_checkWin()) {
-        _checkNoMoves();
-      }
-    } else {
-      setState(() => selectedBottleIndex = null);
-    }
-  }
-
-  bool _hasAnyValidMove() {
-    for (int i = 0; i < bottles.length; i++) {
-      if (bottles[i].isEmpty || _isBottleComplete(bottles[i])) continue;
-      Color top = bottles[i].last;
-      for (int j = 0; j < bottles.length; j++) {
-        if (i == j || bottles[j].length >= maxCapacity) continue;
-        if (bottles[j].isEmpty || bottles[j].last == top) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  void _checkNoMoves() {
-    if (!_hasAnyValidMove() && !isGameOver) {
-      SoundEngine.instance.vibrateHeavy();
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(Lang.t('no_moves'), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
-          content: Text(Lang.t('no_moves_msg'), textAlign: TextAlign.center),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _initLevel(currentLevel);
-              },
-              child: Text(Lang.t('retry'), style: const TextStyle(color: Colors.white70)),
+          // Title
+          const Text(
+            'COLOR SORT',
+            style: TextStyle(
+              fontSize: 40,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 2,
+              shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 18)],
             ),
-            if (!extraBottleUsed)
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7), foregroundColor: Colors.white),
-                onPressed: () {
-                  Navigator.pop(context);
-                  _addExtraBottle();
-                },
-                child: Text('${Lang.t('add_bottle')} (Ad)', style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF7E22CE), Color(0xFFA855F7)]),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Text(
+              'PUZZLE MASTER',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 2),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            isMy ? 'အရောင်စီပါ • အပန်းဖြေပါ • ပျော်ရွှင်ပါ' : 'Sort colors • Relax • Enjoy',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+
+          const SizedBox(height: 36),
+
+          // Golden PLAY Button
+          GestureDetector(
+            onTap: () async {
+              SoundEngine.instance.vib();
+              SoundEngine.instance.click();
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => GameScreen(levelToPlay: GameData.level)),
+              );
+              onRefresh();
+            },
+            child: Container(
+              width: 250,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFFFFE066), Color(0xFFFF9F1C)]),
+                borderRadius: BorderRadius.circular(32),
+                boxShadow: [BoxShadow(color: const Color(0xFFFF9F1C).withOpacity(0.55), blurRadius: 22, offset: const Offset(0, 6))],
               ),
-          ],
-        ),
-      );
-    }
-  }
-
-  bool _checkWin() {
-    for (var bottle in bottles) {
-      if (bottle.isEmpty) continue;
-      if (!_isBottleComplete(bottle)) return false;
-    }
-
-    _countdownTimer?.cancel();
-    SoundEngine.instance.vibrateHeavy();
-    SoundEngine.instance.playWin();
-
-    setState(() => showConfetti = true);
-    _confettiController.forward(from: 0);
-
-    // 3-Star Calculation
-    double ratio = timeLeft / maxTime;
-    int stars = ratio > 0.5 ? 3 : (ratio > 0.25 ? 2 : 1);
-    int rewardCoins = stars * 10;
-    int nextLevel = currentLevel + 1;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(3, (i) => Icon(
-                Icons.star_rounded,
-                size: 40,
-                color: i < stars ? const Color(0xFFFFD166) : Colors.white24,
-              )),
-            ),
-            const SizedBox(height: 8),
-            Text(Lang.t('level_complete'), style: const TextStyle(fontWeight: FontWeight.w900)),
-          ],
-        ),
-        content: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(color: Colors.amber.withOpacity(0.15), borderRadius: BorderRadius.circular(14)),
-          child: Text(
-            '${Lang.t('reward')}: +$rewardCoins 🪙',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 18),
-          ),
-        ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              int updatedCoins = coins + rewardCoins;
-              _saveProgress(nextLevel, updatedCoins);
-              setState(() {
-                currentLevel = nextLevel;
-                coins = updatedCoins;
-              });
-              _initLevel(currentLevel);
-            },
-            child: Text('${Lang.t('next')} (+$rewardCoins 🪙)', style: const TextStyle(color: Colors.white70)),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
-            onPressed: () {
-              Navigator.pop(context);
-              int updatedCoins = coins + (rewardCoins * 2);
-              _saveProgress(nextLevel, updatedCoins);
-              setState(() {
-                currentLevel = nextLevel;
-                coins = updatedCoins;
-              });
-              _initLevel(currentLevel);
-            },
-            icon: const Icon(Icons.play_circle_fill, size: 18),
-            label: Text('2x (+${rewardCoins * 2} 🪙 Ad)', style: const TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-    return true;
-  }
-
-  void _undo() {
-    if (history.isNotEmpty) {
-      SoundEngine.instance.vibrateLight();
-      SoundEngine.instance.playClick();
-      setState(() {
-        bottles = history.removeLast();
-        // Undo လုပ်ရင် revealed list ကို အကုန် true ပြန်ညှိပေးမယ်
-        revealed = bottles.map((b) => List.filled(b.length, true, growable: true)).toList();
-        selectedBottleIndex = null;
-      });
-    }
-  }
-
-  void _useHint() {
-    int? bestFrom;
-    int? bestTo;
-
-    for (int i = 0; i < bottles.length; i++) {
-      if (bottles[i].isEmpty || _isBottleComplete(bottles[i])) continue;
-      Color top = bottles[i].last;
-      for (int j = 0; j < bottles.length; j++) {
-        if (i == j || bottles[j].length >= maxCapacity) continue;
-        if (bottles[j].isNotEmpty && bottles[j].last == top) {
-          bestFrom = i;
-          bestTo = j;
-          break;
-        }
-      }
-      if (bestFrom != null) break;
-    }
-
-    if (bestFrom == null) {
-      for (int i = 0; i < bottles.length; i++) {
-        if (bottles[i].isEmpty || bottles[i].every((c) => c == bottles[i].first)) continue;
-        for (int j = 0; j < bottles.length; j++) {
-          if (bottles[j].isEmpty) {
-            bestFrom = i;
-            bestTo = j;
-            break;
-          }
-        }
-        if (bestFrom != null) break;
-      }
-    }
-
-    if (bestFrom != null && bestTo != null) {
-      SoundEngine.instance.vibrateMedium();
-      SoundEngine.instance.playClick();
-      setState(() {
-        hintFromIndex = bestFrom;
-        hintToIndex = bestTo;
-      });
-    }
-  }
-
-  void _addExtraBottle() {
-    if (extraBottleUsed) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Lang.t('extra_used'))));
-      return;
-    }
-    SoundEngine.instance.vibrateMedium();
-    SoundEngine.instance.playClick();
-    setState(() {
-      bottles.add([]);
-      revealed.add([]);
-      extraBottleUsed = true;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    String timerText = '${(timeLeft ~/ 60).toString().padLeft(2, '0')}:${(timeLeft % 60).toString().padLeft(2, '0')}';
-
-    return Scaffold(
-      body: Stack(
-        children: [
-          BokehBackground(
-            gradient: widget.theme.bgGradient,
-            accent: widget.theme.accentColor,
-            child: SafeArea(
               child: Column(
                 children: [
-                  // Top Bar
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.home_rounded, color: Colors.white70, size: 28),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                        Column(
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  '${Lang.t('level')} $currentLevel',
-                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.5),
-                                ),
-                                if (isMysteryLevel) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(8)),
-                                    child: Text(Lang.t('mystery_badge'), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: timeLeft <= 15 ? const Color(0xFFFF3366).withOpacity(0.25) : Colors.white.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: timeLeft <= 15 ? const Color(0xFFFF3366) : Colors.white24),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.timer, size: 14, color: timeLeft <= 15 ? const Color(0xFFFF3366) : widget.theme.accentColor),
-                                      const SizedBox(width: 4),
-                                      Text(timerText, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: timeLeft <= 15 ? const Color(0xFFFF3366) : Colors.white)),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                  decoration: BoxDecoration(color: Colors.amber.withOpacity(0.15), borderRadius: BorderRadius.circular(16)),
-                                  child: Text('$coins 🪙', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.amber)),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.refresh, color: Colors.white70, size: 26),
-                          onPressed: () => _initLevel(currentLevel),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // 3D ဖန်ပုလင်းများ
-                  Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Wrap(
-                          spacing: 18,
-                          runSpacing: 34,
-                          alignment: WrapAlignment.center,
-                          children: List.generate(bottles.length, (index) => _buildBottle(index)),
-                        ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.play_arrow_rounded, color: Color(0xFF3D1D00), size: 32),
+                      Text(
+                        isMy ? 'ကစားမည်' : 'PLAY',
+                        style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Color(0xFF3D1D00)),
                       ),
-                    ),
+                    ],
                   ),
-
-                  // Action Buttons
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _actionButton(icon: Icons.undo, label: Lang.t('undo'), color: const Color(0xFF334155), onTap: _undo),
-                        _actionButton(icon: Icons.lightbulb, label: Lang.t('hint'), isAd: true, color: const Color(0xFFD97706), onTap: _useHint),
-                        _actionButton(icon: Icons.add_box_rounded, label: Lang.t('add_bottle'), isAd: true, color: const Color(0xFF0284C7), onTap: _addExtraBottle),
-                      ],
-                    ),
-                  ),
-
-                  // Banner Ad Placeholder UI
-                  Container(
-                    height: 52,
-                    width: double.infinity,
-                    margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.white12),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text('AD BANNER SPACE (AdMob Ready)', style: TextStyle(color: Colors.white38, fontSize: 12, letterSpacing: 1.2)),
+                  Text(
+                    isMy ? 'အဆင့် ${GameData.level} ဆက်ကစားမည်' : 'Continue Level ${GameData.level}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF5C2E00)),
                   ),
                 ],
               ),
             ),
           ),
 
-          if (showConfetti)
-            IgnorePointer(
-              child: AnimatedBuilder(
-                animation: _confettiController,
-                builder: (context, child) => CustomPaint(
-                  size: MediaQuery.of(context).size,
-                  painter: ConfettiPainter(progress: _confettiController.value),
-                ),
-              ),
+          const SizedBox(height: 14),
+
+          // Level Map Button
+          TextButton.icon(
+            onPressed: () async {
+              SoundEngine.instance.click();
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => const LevelSelectScreen()));
+              onRefresh();
+            },
+            icon: Icon(Icons.map_rounded, color: theme.accent),
+            label: Text(
+              isMy ? 'အဆင့်များ ရွေးချယ်ရန် (Level Map)' : 'Level Select Map',
+              style: TextStyle(color: theme.accent, fontWeight: FontWeight.bold),
             ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Daily Reward & Daily Challenge Buttons
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _homeFeatureBtn(
+                    icon: Icons.card_giftcard_rounded,
+                    iconColor: const Color(0xFFFF4D6D),
+                    title: isMy ? 'နေ့စဉ်\nလက်ဆောင်' : 'Daily\nReward',
+                    badge: GameData.canClaimDaily ? '1' : null,
+                    onTap: () {
+                      SoundEngine.instance.click();
+                      showDialog(context: context, builder: (_) => DailyRewardDialog(onClaimed: onRefresh));
+                    },
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: _homeFeatureBtn(
+                    icon: Icons.bolt_rounded,
+                    iconColor: const Color(0xFFFFD166),
+                    title: isMy ? 'နေ့စဉ်\nစိန်ခေါ်မှု' : 'Daily\nChallenge',
+                    onTap: () async {
+                      SoundEngine.instance.click();
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => GameScreen(levelToPlay: GameData.level + 5, isChallenge: true)),
+                      );
+                      onRefresh();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const Spacer(),
         ],
       ),
     );
   }
 
-  Widget _buildBottle(int index) {
-    bool isSelected = selectedBottleIndex == index;
-    bool isPouring = pouringBottleIndex == index;
-    bool isHint = hintFromIndex == index || hintToIndex == index;
-    List<Color> colors = bottles[index];
-    List<bool> rev = revealed[index];
-    bool isComplete = _isBottleComplete(colors);
-
-    Color borderColor = widget.skin.hasNeonGlow ? widget.theme.accentColor.withOpacity(0.7) : Colors.white54;
-    if (isComplete) {
-      borderColor = const Color(0xFF00E676);
-    } else if (isHint) {
-      borderColor = const Color(0xFFFFD166);
-    } else if (isSelected) {
-      borderColor = widget.theme.accentColor;
-    }
-
-    return GestureDetector(
-      onTap: () => _onBottleTap(index),
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.topCenter,
-        children: [
-          AnimatedRotation(
-            turns: isPouring ? 0.08 : 0.0,
-            duration: const Duration(milliseconds: 200),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutBack,
-              transform: Matrix4.translationValues(0, (isSelected || isPouring) ? -22 : 0, 0),
-              width: 58,
-              height: 174,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.07),
-                border: Border.all(color: borderColor, width: (isSelected || isHint || isComplete || widget.skin.hasNeonGlow) ? 3 : 2),
-                boxShadow: (isSelected || isHint || isComplete || widget.skin.hasNeonGlow)
-                    ? [BoxShadow(color: borderColor.withOpacity(0.45), blurRadius: 16, spreadRadius: 1)]
-                    : [BoxShadow(color: Colors.black.withOpacity(0.35), blurRadius: 8, offset: const Offset(0, 4))],
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(widget.skin.bottomRadius),
-                  bottomRight: Radius.circular(widget.skin.bottomRadius),
-                  topLeft: Radius.circular(widget.skin.topRadius),
-                  topRight: Radius.circular(widget.skin.topRadius),
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(max(0, widget.skin.bottomRadius - 2)),
-                  bottomRight: Radius.circular(max(0, widget.skin.bottomRadius - 2)),
-                  topLeft: Radius.circular(max(0, widget.skin.topRadius - 2)),
-                  topRight: Radius.circular(max(0, widget.skin.topRadius - 2)),
-                ),
-                child: Stack(
-                  children: [
-                    AnimatedBuilder(
-                      animation: _waveController,
-                      builder: (context, child) {
-                        return CustomPaint(
-                          size: const Size(58, 174),
-                          painter: LiquidBottlePainter(
-                            colors: colors,
-                            revealed: rev,
-                            maxCapacity: maxCapacity,
-                            wavePhase: _waveController.value * 2 * pi,
-                          ),
-                        );
-                      },
-                    ),
-                    // 3D Glass Highlight
-                    Positioned(
-                      left: 6,
-                      top: 12,
-                      bottom: 20,
-                      child: Container(
-                        width: 6,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.white.withOpacity(0.28), Colors.white.withOpacity(0.05)],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                    if (isComplete)
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.45), shape: BoxShape.circle),
-                          child: const Icon(Icons.check, color: Color(0xFF00E676), size: 24),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
+  Widget _miniLogoTube(Color c, double turns) {
+    return Transform.rotate(
+      angle: turns * 2,
+      child: Container(
+        width: 34,
+        height: 76,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16), top: Radius.circular(4)),
+          border: Border.all(color: Colors.white70, width: 2),
+          boxShadow: [BoxShadow(color: c.withOpacity(0.5), blurRadius: 14)],
+        ),
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          height: 50,
+          decoration: BoxDecoration(
+            color: c,
+            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14)),
           ),
-
-          // 3D Bottle Rim (ပုလင်းနှုတ်ခမ်းသား)
-          Positioned(
-            top: (isSelected || isPouring) ? -26 : -4,
-            child: Container(
-              width: 64,
-              height: 8,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.22),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: borderColor, width: 1.5),
-              ),
-            ),
-          ),
-
-          // Cork (ပြည့်သွားရင် အဖုံးပိတ်မယ်)
-          if (isComplete)
-            Positioned(
-              top: -15,
-              child: Container(
-                width: 34,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD97706),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                  border: Border.all(color: const Color(0xFFFFD166), width: 1.5),
-                ),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _actionButton({
+  Widget _homeFeatureBtn({
     required IconData icon,
-    required String label,
-    required Color color,
+    required Color iconColor,
+    required String title,
+    String? badge,
     required VoidCallback onTap,
-    bool isAd = false,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -1697,29 +525,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         clipBehavior: Clip.none,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
             decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 4))],
+              color: const Color(0xFF16214D),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFF38BDF8).withOpacity(0.5), width: 1.5),
             ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, color: Colors.white, size: 19),
-                const SizedBox(width: 5),
-                Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                Icon(icon, color: iconColor, size: 30),
+                const SizedBox(width: 10),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               ],
             ),
           ),
-          if (isAd)
+          if (badge != null)
             Positioned(
-              top: -8,
-              right: -6,
+              top: -6,
+              right: -4,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: const Color(0xFFFF3366), borderRadius: BorderRadius.circular(8)),
-                child: const Text('AD', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white)),
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(color: Color(0xFFFF3366), shape: BoxShape.circle),
+                child: Text(badge, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
               ),
             ),
         ],
@@ -1728,136 +556,1224 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 }
 
-/// ================= 3D GRADIENT LIQUID + BUBBLES + MYSTERY (?) =================
-class LiquidBottlePainter extends CustomPainter {
-  final List<Color> colors;
-  final List<bool> revealed;
-  final int maxCapacity;
-  final double wavePhase;
+/// ================= 2. LEVEL SELECT MAP SCREEN =================
+class LevelSelectScreen extends StatelessWidget {
+  const LevelSelectScreen({super.key});
 
-  LiquidBottlePainter({
-    required this.colors,
-    required this.revealed,
-    required this.maxCapacity,
-    required this.wavePhase,
-  });
+  @override
+  Widget build(BuildContext context) {
+    final theme = kThemes[GameData.selectedTheme];
+    final maxShow = max(20, GameData.level + 5);
+
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: theme.bg)),
+        child: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.pop(context)),
+                        Text(GameData.isMyanmar ? 'အဆင့် ရွေးချယ်ရန်' : 'Level Select',
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                        _pill(icon: Icons.monetization_on, iconColor: Colors.amber, text: '${GameData.coins}'),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 24),
+                      itemCount: maxShow,
+                      itemBuilder: (context, index) {
+                        final lv = index + 1;
+                        final isCurrent = lv == GameData.level;
+                        final isUnlocked = lv <= GameData.level;
+                        final offset = sin(lv * 0.9) * 85;
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          child: Transform.translate(
+                            offset: Offset(offset, 0),
+                            child: Center(
+                              child: GestureDetector(
+                                onTap: isUnlocked
+                                    ? () {
+                                        SoundEngine.instance.click();
+                                        Navigator.pushReplacement(
+                                          context,
+                                          MaterialPageRoute(builder: (_) => GameScreen(levelToPlay: lv)),
+                                        );
+                                      }
+                                    : null,
+                                child: Column(
+                                  children: [
+                                    if (isCurrent) const Icon(Icons.workspace_premium, color: Colors.amber, size: 28),
+                                    Container(
+                                      width: 68,
+                                      height: 68,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: LinearGradient(
+                                          colors: isCurrent
+                                              ? [const Color(0xFFFFD166), const Color(0xFFFF7B00)]
+                                              : (isUnlocked
+                                                  ? [const Color(0xFF1D4ED8), const Color(0xFF1E3A8A)]
+                                                  : [Colors.white12, Colors.white10]),
+                                        ),
+                                        border: Border.all(
+                                          color: isCurrent ? Colors.white : (isUnlocked ? theme.accent : Colors.white24),
+                                          width: isCurrent ? 3 : 2,
+                                        ),
+                                        boxShadow: isCurrent
+                                            ? [BoxShadow(color: Colors.amber.withOpacity(0.6), blurRadius: 18)]
+                                            : null,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: isUnlocked
+                                          ? Text('$lv', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900))
+                                          : const Icon(Icons.lock, color: Colors.white38),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: List.generate(
+                                        3,
+                                        (s) => Icon(
+                                          Icons.star_rounded,
+                                          size: 16,
+                                          color: lv < GameData.level ? Colors.amber : Colors.white24,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              // Treasure Chest Star Progress
+              Positioned(
+                right: 16,
+                bottom: 20,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16214D),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.amber, width: 1.5),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.inventory_2_rounded, color: Colors.amber, size: 32),
+                      Text('${GameData.totalStars % 10}/10 ⭐', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ================= 3. GAMEPLAY SCREEN + PAUSE + LEVEL COMPLETE =================
+class GameScreen extends StatefulWidget {
+  final int levelToPlay;
+  final bool isChallenge;
+  const GameScreen({super.key, required this.levelToPlay, this.isChallenge = false});
+
+  @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
+  static const int cap = 4;
+  final List<Color> palette = [
+    const Color(0xFFFF2E63),
+    const Color(0xFF00E5FF),
+    const Color(0xFF00E676),
+    const Color(0xFFFFD166),
+    const Color(0xFFA855F7),
+    const Color(0xFFFF7B00),
+    const Color(0xFF2EC4B6),
+    const Color(0xFFF72585),
+  ];
+
+  late int level;
+  late AnimationController _waveCtrl;
+  List<List<Color>> bottles = [];
+  List<List<List<Color>>> history = [];
+  int? selected, pouring, hintFrom, hintTo;
+  bool extraUsed = false, paused = false;
+  int moves = 0, timeLeft = 120, maxTime = 120;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    level = widget.levelToPlay;
+    _waveCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+    _initLevel();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _waveCtrl.dispose();
+    super.dispose();
+  }
+
+  void _initLevel() {
+    _timer?.cancel();
+    int numColors = min(3 + (level ~/ 2), palette.length);
+    final drops = <Color>[];
+    for (int i = 0; i < numColors; i++) {
+      for (int j = 0; j < cap; j++) {
+        drops.add(palette[i]);
+      }
+    }
+    drops.shuffle(Random());
+    bottles = List.generate(numColors, (i) => drops.sublist(i * cap, (i + 1) * cap));
+    bottles.addAll([[], []]);
+    history.clear();
+    selected = pouring = hintFrom = hintTo = null;
+    extraUsed = paused = false;
+    moves = 0;
+    maxTime = 60 + numColors * 15;
+    timeLeft = maxTime;
+    setState(() {});
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (paused) return;
+      if (timeLeft > 0) {
+        setState(() => timeLeft--);
+      } else {
+        t.cancel();
+        SoundEngine.instance.lose();
+        _showTimeUp();
+      }
+    });
+  }
+
+  bool _isDone(List<Color> b) => b.length == cap && b.every((c) => c == b.first);
+
+  void _tapBottle(int i) {
+    if (paused || pouring != null || _isDone(bottles[i])) return;
+    setState(() => hintFrom = hintTo = null);
+    if (selected == null) {
+      if (bottles[i].isNotEmpty) {
+        SoundEngine.instance.vib();
+        SoundEngine.instance.click();
+        setState(() => selected = i);
+      }
+    } else if (selected == i) {
+      SoundEngine.instance.click();
+      setState(() => selected = null);
+    } else {
+      _pour(selected!, i);
+    }
+  }
+
+  Future<void> _pour(int from, int to) async {
+    final fb = bottles[from], tb = bottles[to];
+    if (fb.isEmpty || tb.length >= cap) {
+      setState(() => selected = null);
+      return;
+    }
+    final top = fb.last;
+    if (tb.isEmpty || tb.last == top) {
+      history.add(bottles.map((b) => List<Color>.from(b)).toList());
+      SoundEngine.instance.vib();
+      SoundEngine.instance.pour();
+      setState(() => pouring = from);
+      await Future.delayed(const Duration(milliseconds: 200));
+      setState(() {
+        while (fb.isNotEmpty && fb.last == top && tb.length < cap) {
+          tb.add(fb.removeLast());
+        }
+        moves++;
+        selected = pouring = null;
+      });
+      _checkWin();
+    } else {
+      setState(() => selected = null);
+    }
+  }
+
+  void _checkWin() {
+    for (final b in bottles) {
+      if (b.isNotEmpty && !_isDone(b)) return;
+    }
+    _timer?.cancel();
+    SoundEngine.instance.win();
+    final elapsed = maxTime - timeLeft;
+    final stars = timeLeft > maxTime * 0.5 ? 3 : (timeLeft > maxTime * 0.25 ? 2 : 1);
+    final reward = widget.isChallenge ? 150 : 100;
+
+    if (!widget.isChallenge && level >= GameData.level) {
+      GameData.level = level + 1;
+    }
+    GameData.totalStars += stars;
+    GameData.save();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF131B3E),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Color(0xFF00E5FF), width: 2),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.workspace_premium, color: Colors.amber, size: 46),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(3, (i) => Icon(Icons.star_rounded, size: 42, color: i < stars ? Colors.amber : Colors.white24)),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF7E22CE), Color(0xFFA855F7)]),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Text('LEVEL COMPLETED!', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+            ),
+            const SizedBox(height: 6),
+            const Text('Perfect!', style: TextStyle(color: Colors.amber, fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(14)),
+              child: Column(
+                children: [
+                  Text('+$reward Coins 🪙', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text('Time: ${_fmt(elapsed)}   •   Moves: $moves', style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00B4D8),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: () {
+                  GameData.coins += reward;
+                  GameData.save();
+                  Navigator.pop(context);
+                  setState(() => level++);
+                  _initLevel();
+                },
+                child: const Text('NEXT LEVEL ➔', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFB703),
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: () {
+                  // TODO: AdMob Rewarded Ad
+                  GameData.coins += reward * 2;
+                  GameData.save();
+                  Navigator.pop(context);
+                  setState(() => level++);
+                  _initLevel();
+                },
+                icon: const Icon(Icons.ondemand_video_rounded),
+                label: const Text('DOUBLE COINS x2 (Watch Ad)', style: TextStyle(fontWeight: FontWeight.w900)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTimeUp() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF131B3E),
+        title: const Text("Time's Up! 😢", textAlign: TextAlign.center),
+        content: const Text('Watch an Ad for +30s or Retry?', textAlign: TextAlign.center),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(onPressed: () { Navigator.pop(context); _initLevel(); }, child: const Text('Retry')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E676), foregroundColor: Colors.black),
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() => timeLeft = 30);
+              _startTimer();
+            },
+            child: const Text('+30s (Ad)'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _useUndo() {
+    if (history.isEmpty) return;
+    if (GameData.undoCount > 0) {
+      GameData.undoCount--;
+      GameData.save();
+    }
+    SoundEngine.instance.click();
+    setState(() {
+      bottles = history.removeLast();
+      selected = null;
+    });
+  }
+
+  void _useHint() {
+    for (int i = 0; i < bottles.length; i++) {
+      if (bottles[i].isEmpty || _isDone(bottles[i])) continue;
+      final top = bottles[i].last;
+      for (int j = 0; j < bottles.length; j++) {
+        if (i != j && bottles[j].length < cap && (bottles[j].isEmpty || bottles[j].last == top)) {
+          if (GameData.hintCount > 0) {
+            GameData.hintCount--;
+            GameData.save();
+          }
+          SoundEngine.instance.click();
+          setState(() { hintFrom = i; hintTo = j; });
+          return;
+        }
+      }
+    }
+  }
+
+  void _addTube() {
+    if (extraUsed) return;
+    if (GameData.tubeCount > 0) {
+      GameData.tubeCount--;
+      GameData.save();
+    }
+    SoundEngine.instance.click();
+    setState(() {
+      bottles.add([]);
+      extraUsed = true;
+    });
+  }
+
+  String _fmt(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = kThemes[GameData.selectedTheme];
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: theme.bg)),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  // Top Bar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Level $level', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                        _pill(icon: Icons.monetization_on, iconColor: Colors.amber, text: '${GameData.coins}'),
+                        IconButton(
+                          icon: const Icon(Icons.pause_circle_filled, color: Color(0xFF38BDF8), size: 34),
+                          onPressed: () => setState(() => paused = true),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Timer & Stars Pill
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _pill(icon: Icons.timer, iconColor: const Color(0xFF38BDF8), text: _fmt(timeLeft)),
+                      const SizedBox(width: 12),
+                      _pill(icon: Icons.star_rounded, iconColor: Colors.amber, text: '3'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: Text(GameData.isMyanmar ? 'အရောင်တူများ စုထည့်ပါ' : 'Sort all colors',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+
+                  // Tubes
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Wrap(
+                          spacing: 18,
+                          runSpacing: 30,
+                          alignment: WrapAlignment.center,
+                          children: List.generate(bottles.length, _buildTube),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Bottom Controls (Undo, Hint, + Tube with Badges)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _gameBtn(Icons.undo_rounded, 'Undo', GameData.undoCount, const Color(0xFF1E293B), _useUndo),
+                        _gameBtn(Icons.lightbulb_rounded, 'Hint', GameData.hintCount, const Color(0xFFFF9F1C), _useHint),
+                        _gameBtn(Icons.add_box_rounded, '+ Tube', GameData.tubeCount, const Color(0xFF0284C7), _addTube),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // PAUSE OVERLAY
+          if (paused)
+            BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+              child: Container(
+                color: Colors.black.withOpacity(0.65),
+                alignment: Alignment.center,
+                child: Container(
+                  width: 280,
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF131B3E),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: theme.accent, width: 2),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.pause_rounded, size: 46, color: Colors.white),
+                      const Text('PAUSED', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                      const SizedBox(height: 18),
+                      _pauseBtn(Icons.play_arrow_rounded, 'Resume', const Color(0xFF0284C7), () => setState(() => paused = false)),
+                      _pauseBtn(Icons.refresh_rounded, 'Restart Level', const Color(0xFF1E293B), _initLevel),
+                      _pauseBtn(Icons.home_rounded, 'Home', const Color(0xFF1E293B), () => Navigator.pop(context)),
+                      _pauseBtn(Icons.settings, 'Settings', const Color(0xFF1E293B), () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTube(int i) {
+    final isSel = selected == i, isPour = pouring == i, isHint = hintFrom == i || hintTo == i;
+    final b = bottles[i], done = _isDone(b);
+    final border = done ? const Color(0xFF00E676) : (isHint ? Colors.amber : (isSel ? const Color(0xFF00E5FF) : Colors.white60));
+
+    return GestureDetector(
+      onTap: () => _tapBottle(i),
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          AnimatedRotation(
+            turns: isPour ? 0.08 : 0,
+            duration: const Duration(milliseconds: 200),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              transform: Matrix4.translationValues(0, (isSel || isPour) ? -20 : 0, 0),
+              width: 56,
+              height: 170,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.08),
+                border: Border.all(color: border, width: (isSel || isHint || done) ? 3 : 2),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(26), top: Radius.circular(6)),
+                boxShadow: [BoxShadow(color: border.withOpacity(0.35), blurRadius: 12)],
+              ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24), top: Radius.circular(4)),
+                child: AnimatedBuilder(
+                  animation: _waveCtrl,
+                  builder: (_, __) => CustomPaint(
+                    painter: _LiquidPainter(b, cap, _waveCtrl.value * 2 * pi),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: (isSel || isPour) ? -24 : -4,
+            child: Container(
+              width: 62,
+              height: 7,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(6), border: Border.all(color: border)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _gameBtn(IconData icon, String label, int count, Color c, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 96,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: c,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white24),
+              boxShadow: [BoxShadow(color: c.withOpacity(0.45), blurRadius: 10)],
+            ),
+            child: Column(
+              children: [
+                Icon(icon, color: Colors.white, size: 24),
+                const SizedBox(height: 2),
+                Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              ],
+            ),
+          ),
+          Positioned(
+            top: -6,
+            right: -6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: const BoxDecoration(color: Color(0xFFFF2E63), shape: BoxShape.circle),
+              child: Text(count > 0 ? '$count' : 'AD', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pauseBtn(IconData icon, String text, Color c, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: c,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+          onPressed: onTap,
+          icon: Icon(icon),
+          label: Text(text, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      ),
+    );
+  }
+}
+
+class _LiquidPainter extends CustomPainter {
+  final List<Color> colors;
+  final int cap;
+  final double phase;
+  _LiquidPainter(this.colors, this.cap, this.phase);
 
   @override
   void paint(Canvas canvas, Size size) {
     if (colors.isEmpty) return;
-
-    final double layerHeight = (size.height - 16) / maxCapacity;
-
+    final h = (size.height - 14) / cap;
     for (int i = 0; i < colors.length; i++) {
-      final bool isVisible = i < revealed.length ? revealed[i] : true;
-      final Color baseColor = isVisible ? colors[i] : const Color(0xFF334155);
-
-      final double bottomY = size.height - (i * layerHeight);
-      final double topY = bottomY - layerHeight;
-      final bool isTopLayer = (i == colors.length - 1);
-
-      final rect = Rect.fromLTRB(0, topY, size.width, bottomY + 1);
-      final paint = Paint()
-        ..shader = LinearGradient(
-          colors: [
-            baseColor.withOpacity(0.85),
-            baseColor,
-            Color.lerp(baseColor, Colors.black, 0.25)!,
-          ],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ).createShader(rect);
-
-      if (!isTopLayer) {
-        canvas.drawRect(rect, paint);
+      final bY = size.height - i * h, tY = bY - h;
+      final paint = Paint()..color = colors[i];
+      if (i < colors.length - 1) {
+        canvas.drawRect(Rect.fromLTRB(0, tY, size.width, bY + 1), paint);
       } else {
-        final path = Path();
-        path.moveTo(0, bottomY + 1);
-        path.lineTo(0, topY);
+        final path = Path()..moveTo(0, bY + 1)..lineTo(0, tY);
         for (double x = 0; x <= size.width; x++) {
-          final y = topY + sin((x / size.width * 2 * pi) + wavePhase) * 3.5;
-          path.lineTo(x, y);
+          path.lineTo(x, tY + sin((x / size.width * 2 * pi) + phase) * 3);
         }
-        path.lineTo(size.width, bottomY + 1);
-        path.close();
+        path..lineTo(size.width, bY + 1)..close();
         canvas.drawPath(path, paint);
-
-        // Surface Glow Line
-        final glowPaint = Paint()
-          ..color = Colors.white.withOpacity(0.35)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2;
-        final glowPath = Path();
-        for (double x = 0; x <= size.width; x++) {
-          final y = topY + sin((x / size.width * 2 * pi) + wavePhase) * 3.5;
-          if (x == 0) {
-            glowPath.moveTo(x, y);
-          } else {
-            glowPath.lineTo(x, y);
-          }
-        }
-        canvas.drawPath(glowPath, glowPaint);
-      }
-
-      // Mystery (?) Text
-      if (!isVisible) {
-        final textPainter = TextPainter(
-          text: const TextSpan(
-            text: '?',
-            style: TextStyle(color: Colors.white70, fontSize: 20, fontWeight: FontWeight.w900),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        textPainter.paint(
-          canvas,
-          Offset((size.width - textPainter.width) / 2, topY + (layerHeight - textPainter.height) / 2),
-        );
-      } else {
-        // Rising Bubbles inside liquid
-        final bubblePaint = Paint()..color = Colors.white.withOpacity(0.25);
-        final bx = 14 + ((i * 17) % 30).toDouble();
-        final by = bottomY - (((wavePhase / (2 * pi)) + i * 0.3) % 1.0) * layerHeight;
-        canvas.drawCircle(Offset(bx, by), 2.5, bubblePaint);
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant LiquidBottlePainter oldDelegate) => true;
+  bool shouldRepaint(covariant _LiquidPainter old) => true;
 }
 
-class ConfettiPainter extends CustomPainter {
-  final double progress;
-  final Random _rng = Random(42);
-  final List<Color> _colors = [
-    const Color(0xFFFF3366),
-    const Color(0xFF00D2FF),
-    const Color(0xFF00E676),
-    const Color(0xFFFFD166),
-    const Color(0xFFE879F9),
-  ];
-
-  ConfettiPainter({required this.progress});
+/// ================= 4. SHOP TAB (THEMES, HINTS, MORE + REMOVE ADS) =================
+class ShopTab extends StatefulWidget {
+  final VoidCallback onRefresh;
+  const ShopTab({super.key, required this.onRefresh});
 
   @override
-  void paint(Canvas canvas, Size size) {
-    for (int i = 0; i < 65; i++) {
-      final startX = _rng.nextDouble() * size.width;
-      final speed = 0.6 + _rng.nextDouble() * 0.8;
-      final y = (progress * size.height * 1.4 * speed) - (_rng.nextDouble() * 200);
-      final x = startX + sin(progress * 10 + i) * 25;
+  State<ShopTab> createState() => _ShopTabState();
+}
 
-      if (y > 0 && y < size.height) {
-        final paint = Paint()..color = _colors[i % _colors.length].withOpacity((1 - progress).clamp(0.0, 1.0));
-        canvas.save();
-        canvas.translate(x, y);
-        canvas.rotate(progress * 8 + i);
-        canvas.drawRect(const Rect.fromLTWH(-4, -4, 8, 12), paint);
-        canvas.restore();
-      }
-    }
+class _ShopTabState extends State<ShopTab> {
+  int subTab = 0; // 0: Themes, 1: Hints, 2: More
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Shop', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                _pill(icon: Icons.monetization_on, iconColor: Colors.amber, text: '${GameData.coins}'),
+              ],
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _tabChip('Themes', 0),
+              const SizedBox(width: 8),
+              _tabChip('Hints', 1),
+              const SizedBox(width: 8),
+              _tabChip('More', 2),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: subTab == 0
+                ? GridView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: 0.72,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemCount: kThemes.length,
+                    itemBuilder: (_, i) {
+                      final t = kThemes[i];
+                      final owned = GameData.unlockedThemes.contains('$i');
+                      final eq = GameData.selectedTheme == i;
+                      return GestureDetector(
+                        onTap: () {
+                          if (owned) {
+                            GameData.selectedTheme = i;
+                            GameData.save();
+                            SoundEngine.instance.click();
+                            setState(() {});
+                            widget.onRefresh();
+                          } else if (GameData.coins >= t.price) {
+                            GameData.coins -= t.price;
+                            GameData.unlockedThemes.add('$i');
+                            GameData.selectedTheme = i;
+                            GameData.save();
+                            SoundEngine.instance.win();
+                            setState(() {});
+                            widget.onRefresh();
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Not enough coins!')));
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: t.bg),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: eq ? const Color(0xFF00E676) : t.accent, width: eq ? 2.5 : 1.5),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Icon(Icons.science_rounded, color: t.accent, size: 42),
+                              Text(t.name, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              Text(
+                                eq ? '✔ Equipped' : (owned ? 'Use' : '${t.price} 🪙'),
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: eq ? const Color(0xFF00E676) : Colors.amber),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                : ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _buyTile('5x Hints Pack 💡', 200, () { GameData.hintCount += 5; }),
+                      _buyTile('5x Undo Pack ↩️', 150, () { GameData.undoCount += 5; }),
+                      _buyTile('3x Extra Tubes 🧪', 300, () { GameData.tubeCount += 3; }),
+                    ],
+                  ),
+          ),
+          // Remove Ads $1.99 Banner
+          Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF7E22CE), Color(0xFFEC4899)]),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.block_rounded, color: Colors.white),
+                    SizedBox(width: 10),
+                    Text('Remove Ads', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                  ],
+                ),
+                Text('\$1.99', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.amber)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
+  Widget _tabChip(String title, int i) {
+    final active = subTab == i;
+    return GestureDetector(
+      onTap: () => setState(() => subTab = i),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF0284C7) : Colors.white12,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buyTile(String title, int price, VoidCallback grant) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
+            onPressed: () {
+              if (GameData.coins >= price) {
+                GameData.coins -= price;
+                grant();
+                GameData.save();
+                SoundEngine.instance.win();
+                setState(() {});
+                widget.onRefresh();
+              }
+            },
+            child: Text('$price 🪙', style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ================= 5. DAILY REWARD (7-DAY DIALOG) =================
+class DailyRewardDialog extends StatelessWidget {
+  final VoidCallback onClaimed;
+  const DailyRewardDialog({super.key, required this.onClaimed});
+
   @override
-  bool shouldRepaint(covariant ConfettiPainter oldDelegate) => true;
+  Widget build(BuildContext context) {
+    final rewards = ['100 🪙', '150 🪙', '1 Hint', '250 🪙', '3 Undo', '500 🪙'];
+
+    return AlertDialog(
+      backgroundColor: const Color(0xFF131B3E),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: Color(0xFF38BDF8), width: 2),
+      ),
+      title: const Column(
+        children: [
+          Text('Daily Reward', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 22)),
+          SizedBox(height: 4),
+          Text('Login every day to get amazing rewards!', style: TextStyle(fontSize: 12, color: Colors.white70)),
+        ],
+      ),
+      content: SizedBox(
+        width: 300,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 0.9,
+              ),
+              itemCount: 6,
+              itemBuilder: (_, i) {
+                final day = i + 1;
+                final active = day == GameData.dailyDay;
+                return Container(
+                  decoration: BoxDecoration(
+                    color: active ? const Color(0xFF065F46) : Colors.white10,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: active ? const Color(0xFF00E676) : Colors.white24, width: active ? 2 : 1),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Day $day', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      const Icon(Icons.monetization_on, color: Colors.amber, size: 22),
+                      const SizedBox(height: 4),
+                      Text(rewards[i], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF4C1D95), Color(0xFF7E22CE)]),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.amber),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.card_giftcard_rounded, color: Colors.amber, size: 30),
+                  SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Day 7', style: TextStyle(fontSize: 12, color: Colors.amber)),
+                      Text('Special Tube Skin', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: GameData.canClaimDaily ? const Color(0xFF00E676) : Colors.white24,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: GameData.canClaimDaily
+                    ? () {
+                        GameData.coins += 100;
+                        GameData.dailyDay = (GameData.dailyDay % 7) + 1;
+                        GameData.lastDailyDate = DateTime.now().toIso8601String().substring(0, 10);
+                        GameData.save();
+                        SoundEngine.instance.win();
+                        onClaimed();
+                        Navigator.pop(context);
+                      }
+                    : null,
+                child: Text(GameData.canClaimDaily ? 'Claim' : 'Claimed Today ✔',
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ================= 6. SETTINGS SCREEN =================
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final theme = kThemes[GameData.selectedTheme];
+
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: theme.bg)),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Row(
+                children: [
+                  IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.pop(context)),
+                  const Text('Settings', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _card([
+                SwitchListTile(
+                  secondary: const Icon(Icons.volume_up, color: Color(0xFF38BDF8)),
+                  title: const Text('Sound'),
+                  value: SoundEngine.instance.sfxOn,
+                  onChanged: (v) { setState(() => SoundEngine.instance.sfxOn = v); GameData.save(); },
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.music_note, color: Color(0xFF38BDF8)),
+                  title: const Text('Music'),
+                  value: SoundEngine.instance.musicOn,
+                  onChanged: (v) async { await SoundEngine.instance.setMusic(v); setState(() {}); GameData.save(); },
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.vibration, color: Color(0xFF38BDF8)),
+                  title: const Text('Vibration'),
+                  value: SoundEngine.instance.vibOn,
+                  onChanged: (v) { setState(() => SoundEngine.instance.vibOn = v); GameData.save(); },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.language, color: Color(0xFF38BDF8)),
+                  title: const Text('Language'),
+                  trailing: Text(GameData.isMyanmar ? 'မြန်မာ 🇲🇲' : 'English 🇺🇸', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                  onTap: () { setState(() => GameData.isMyanmar = !GameData.isMyanmar); GameData.save(); },
+                ),
+                const ListTile(
+                  leading: Icon(Icons.dark_mode, color: Color(0xFF38BDF8)),
+                  title: Text('Theme'),
+                  trailing: Text('Dark', style: TextStyle(color: Colors.white70)),
+                ),
+                const ListTile(
+                  leading: Icon(Icons.cloud_done, color: Color(0xFF00E676)),
+                  title: Text('Save Progress'),
+                  trailing: Icon(Icons.check_circle, color: Color(0xFF00E676)),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.notifications, color: Color(0xFF00E676)),
+                  title: const Text('Notifications'),
+                  value: GameData.notificationsOn,
+                  onChanged: (v) { setState(() => GameData.notificationsOn = v); GameData.save(); },
+                ),
+              ]),
+              const SizedBox(height: 16),
+              _card([
+                ListTile(
+                  leading: const Icon(Icons.help_outline, color: Colors.white70),
+                  title: const Text('How to Play'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _info(context, 'How to Play', 'Tap a tube to pick up the top color, then tap another tube to pour. Group all matching colors into one tube!'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.privacy_tip_outlined, color: Colors.white70),
+                  title: const Text('Privacy Policy'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _info(context, 'Privacy Policy', 'Your game progress is stored locally on your device. Ads are served via Google AdMob.'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.mail_outline, color: Colors.white70),
+                  title: const Text('Contact Us'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _info(context, 'Contact Us', 'Support Email: support@colorsortmaster.com'),
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _card(List<Widget> children) => Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF131B3E),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Column(children: children),
+      );
+
+  void _info(BuildContext ctx, String t, String msg) {
+    showDialog(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF131B3E),
+        title: Text(t),
+        content: Text(msg),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+      ),
+    );
+  }
+}
+
+/// ================= 7. RANK & EVENTS TABS =================
+class RankTab extends StatelessWidget {
+  const RankTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final leaders = [
+      ('AlexPro', 142),
+      ('LunaSort', 118),
+      ('MasterKai', 95),
+      ('You', GameData.level),
+      ('NovaStar', 10),
+    ]..sort((a, b) => b.$2.compareTo(a.$2));
+
+    return SafeArea(
+      child: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('Leaderboard 🏆', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: leaders.length,
+              itemBuilder: (_, i) {
+                final item = leaders[i];
+                final isMe = item.$1 == 'You';
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: isMe ? const Color(0xFF0284C7).withOpacity(0.35) : Colors.white10,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isMe ? const Color(0xFF38BDF8) : Colors.white12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('#${i + 1}   ${item.$1}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text('Lv.${item.$2}', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class EventsTab extends StatelessWidget {
+  final VoidCallback onRefresh;
+  const EventsTab({super.key, required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text('Special Events ⭐', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF4C1D95), Color(0xFF7E22CE)]),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: Colors.amber),
+              ),
+              child: Column(
+                children: [
+                  const Icon(Icons.casino_rounded, color: Colors.amber, size: 54),
+                  const SizedBox(height: 8),
+                  const Text('Lucky Spin Wheel', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                  const Text('Spin to win up to +200 Coins!', style: TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 14),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
+                    onPressed: () {
+                      final prize = [20, 50, 100, 200][Random().nextInt(4)];
+                      GameData.coins += prize;
+                      GameData.save();
+                      SoundEngine.instance.win();
+                      onRefresh();
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('You won +$prize Coins! 🎉')));
+                    },
+                    child: const Text('SPIN NOW (AD)', style: TextStyle(fontWeight: FontWeight.w900)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ================= HELPER WIDGET =================
+Widget _pill({required IconData icon, required Color iconColor, required String text, Widget? trailing}) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    decoration: BoxDecoration(
+      color: const Color(0xFF16214D),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: Colors.white24),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: iconColor, size: 18),
+        const SizedBox(width: 6),
+        Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        if (trailing != null) ...[const SizedBox(width: 6), trailing],
+      ],
+    ),
+  );
 }
