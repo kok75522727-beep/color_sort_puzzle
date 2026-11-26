@@ -149,30 +149,21 @@ class SoundEngine {
     _loseWav = _melody([392.0, 349.23, 311.13, 261.63], 0.2);
   }
 
+  final AudioPlayer _bgmPlayer = AudioPlayer();
+
   Future<void> startBgm() async {
-    if (!musicOn || _started) return;
+    if (!GameData.musicOn) return;
     try {
-      _started = true;
-      await _bgm.setReleaseMode(ReleaseMode.loop);
-      await _bgm.setVolume(0.25);
-      try {
-        await _bgm.play(AssetSource('audio/bgm.mp3'));
-      } catch (_) {
-        await _bgm.play(BytesSource(_bgmWav));
-      }
-    } catch (_) {
-      _started = false;
-    }
+      await _bgmPlayer.setReleaseMode(ReleaseMode.loop);
+      await _bgmPlayer.setVolume(0.35);
+      await _bgmPlayer.play(AssetSource('bgm.mp3'));
+    } catch (_) {}
   }
 
-  Future<void> setMusic(bool v) async {
-    musicOn = v;
-    if (!v) {
-      await _bgm.pause();
-    } else {
-      _started = false;
-      await startBgm();
-    }
+  Future<void> stopBgm() async {
+    try {
+      await _bgmPlayer.stop();
+    } catch (_) {}
   }
 
   void vib() {
@@ -406,7 +397,7 @@ class HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const Text(
-            'COLOR SORT',
+            'COLOR POUR',
             style: TextStyle(
               fontSize: 40,
               fontWeight: FontWeight.w900,
