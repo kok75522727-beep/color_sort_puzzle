@@ -165,8 +165,17 @@ class SoundEngine {
   Future<void> startBgm() async {
     if (!_musicOn) return;
     try {
+      await _bgmPlayer.setAudioContext(AudioContext(
+        android: AudioContextAndroid(
+          isSpeakerphoneOn: false,
+          stayAwake: false,
+          contentType: AndroidContentType.music,
+          usageType: AndroidUsageType.game,
+          audioFocus: AndroidAudioFocus.none,
+        ),
+      ));
       await _bgmPlayer.setReleaseMode(ReleaseMode.loop);
-      await _bgmPlayer.setVolume(0.35);
+      await _bgmPlayer.setVolume(0.7);
       await _bgmPlayer.play(AssetSource('bgm.mp3'));
     } catch (_) {}
   }
