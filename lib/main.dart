@@ -94,12 +94,13 @@ class SoundEngine {
   final AudioPlayer _sfx = AudioPlayer();
   bool musicOn = true, sfxOn = true, vibOn = true, _started = false;
 
-  late Uint8List _bgmWav, _clickWav, _pourWav, _winWav, _loseWav;
+  late Uint8List _bgmWav, _clickWav, _pourWav, _doneWav, _winWav, _loseWav;
 
   SoundEngine._() {
     _bgmWav = _makeBgm();
     _clickWav = _tone(540, 0.07, 0.35);
     _pourWav = _sweep(320, 720, 0.22, 0.4);
+    _doneWav = _melody([659.25, 880.0], 0.10);
     _winWav = _melody([523.25, 659.25, 783.99, 1046.5], 0.13);
     _loseWav = _melody([392.0, 349.23, 311.13, 261.63], 0.2);
   }
@@ -134,8 +135,13 @@ class SoundEngine {
     if (vibOn) HapticFeedback.lightImpact();
   }
 
+  void vibHeavy() {
+    if (vibOn) HapticFeedback.heavyImpact();
+  }
+
   void click() => _play(_clickWav);
   void pour() => _play(_pourWav);
+  void bottleDone() => _play(_doneWav);
   void win() => _play(_winWav);
   void lose() => _play(_loseWav);
 
@@ -215,7 +221,7 @@ class ColorSortMasterApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Color Sort Puzzle Master',
+      title: 'Color Sort Master',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: const Color(0xFF0A0E2A)),
       home: const MainShell(),
@@ -223,7 +229,7 @@ class ColorSortMasterApp extends StatelessWidget {
   }
 }
 
-/// ================= MAIN SHELL (BOTTOM NAV: HOME, SHOP, RANK, EVENTS) =================
+/// ================= MAIN SHELL =================
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -311,17 +317,12 @@ class HomeTab extends StatelessWidget {
     return SafeArea(
       child: Column(
         children: [
-          // Top Bar: Crown Lv | Coins + | Settings
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _pill(
-                  icon: Icons.workspace_premium,
-                  iconColor: Colors.amber,
-                  text: 'Lv.${GameData.level}',
-                ),
+                _pill(icon: Icons.workspace_premium, iconColor: Colors.amber, text: 'Lv.${GameData.level}'),
                 GestureDetector(
                   onTap: onOpenShop,
                   child: _pill(
@@ -342,10 +343,7 @@ class HomeTab extends StatelessWidget {
               ],
             ),
           ),
-
           const Spacer(),
-
-          // 3 Glowing Tubes Logo
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -357,8 +355,6 @@ class HomeTab extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-
-          // Title
           const Text(
             'COLOR SORT',
             style: TextStyle(
@@ -374,28 +370,19 @@ class HomeTab extends StatelessWidget {
               gradient: const LinearGradient(colors: [Color(0xFF7E22CE), Color(0xFFA855F7)]),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Text(
-              'PUZZLE MASTER',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 2),
-            ),
+            child: const Text('PUZZLE MASTER', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 2)),
           ),
           const SizedBox(height: 10),
           Text(
             isMy ? 'အရောင်စီပါ • အပန်းဖြေပါ • ပျော်ရွှင်ပါ' : 'Sort colors • Relax • Enjoy',
             style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
-
           const SizedBox(height: 36),
-
-          // Golden PLAY Button
           GestureDetector(
             onTap: () async {
               SoundEngine.instance.vib();
               SoundEngine.instance.click();
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => GameScreen(levelToPlay: GameData.level)),
-              );
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => GameScreen(levelToPlay: GameData.level)));
               onRefresh();
             },
             child: Container(
@@ -412,10 +399,8 @@ class HomeTab extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Icon(Icons.play_arrow_rounded, color: Color(0xFF3D1D00), size: 32),
-                      Text(
-                        isMy ? 'ကစားမည်' : 'PLAY',
-                        style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Color(0xFF3D1D00)),
-                      ),
+                      Text(isMy ? 'ကစားမည်' : 'PLAY',
+                          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Color(0xFF3D1D00))),
                     ],
                   ),
                   Text(
@@ -426,10 +411,7 @@ class HomeTab extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 14),
-
-          // Level Map Button
           TextButton.icon(
             onPressed: () async {
               SoundEngine.instance.click();
@@ -442,10 +424,7 @@ class HomeTab extends StatelessWidget {
               style: TextStyle(color: theme.accent, fontWeight: FontWeight.bold),
             ),
           ),
-
           const SizedBox(height: 16),
-
-          // Daily Reward & Daily Challenge Buttons
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
@@ -481,7 +460,6 @@ class HomeTab extends StatelessWidget {
               ],
             ),
           ),
-
           const Spacer(),
         ],
       ),
@@ -503,10 +481,7 @@ class HomeTab extends StatelessWidget {
         alignment: Alignment.bottomCenter,
         child: Container(
           height: 50,
-          decoration: BoxDecoration(
-            color: c,
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14)),
-          ),
+          decoration: BoxDecoration(color: c, borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14))),
         ),
       ),
     );
@@ -556,14 +531,38 @@ class HomeTab extends StatelessWidget {
   }
 }
 
-/// ================= 2. LEVEL SELECT MAP SCREEN =================
-class LevelSelectScreen extends StatelessWidget {
+/// ================= 2. LEVEL SELECT MAP + CLAIMABLE STAR CHEST =================
+class LevelSelectScreen extends StatefulWidget {
   const LevelSelectScreen({super.key});
+
+  @override
+  State<LevelSelectScreen> createState() => _LevelSelectScreenState();
+}
+
+class _LevelSelectScreenState extends State<LevelSelectScreen> {
+  void _claimChest() {
+    if (GameData.totalStars >= 10) {
+      GameData.totalStars -= 10;
+      GameData.coins += 200;
+      GameData.save();
+      SoundEngine.instance.win();
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Star Chest Opened! +200 Coins 🪙🎉')),
+      );
+    } else {
+      SoundEngine.instance.click();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Collect ${10 - GameData.totalStars} more ⭐ to open this chest!')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = kThemes[GameData.selectedTheme];
     final maxShow = max(20, GameData.level + 5);
+    final canOpen = GameData.totalStars >= 10;
 
     return Scaffold(
       body: Container(
@@ -630,9 +629,7 @@ class LevelSelectScreen extends StatelessWidget {
                                           color: isCurrent ? Colors.white : (isUnlocked ? theme.accent : Colors.white24),
                                           width: isCurrent ? 3 : 2,
                                         ),
-                                        boxShadow: isCurrent
-                                            ? [BoxShadow(color: Colors.amber.withOpacity(0.6), blurRadius: 18)]
-                                            : null,
+                                        boxShadow: isCurrent ? [BoxShadow(color: Colors.amber.withOpacity(0.6), blurRadius: 18)] : null,
                                       ),
                                       alignment: Alignment.center,
                                       child: isUnlocked
@@ -644,11 +641,7 @@ class LevelSelectScreen extends StatelessWidget {
                                       mainAxisSize: MainAxisSize.min,
                                       children: List.generate(
                                         3,
-                                        (s) => Icon(
-                                          Icons.star_rounded,
-                                          size: 16,
-                                          color: lv < GameData.level ? Colors.amber : Colors.white24,
-                                        ),
+                                        (s) => Icon(Icons.star_rounded, size: 16, color: lv < GameData.level ? Colors.amber : Colors.white24),
                                       ),
                                     ),
                                   ],
@@ -662,22 +655,29 @@ class LevelSelectScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              // Treasure Chest Star Progress
+              // Claimable Star Chest
               Positioned(
                 right: 16,
                 bottom: 20,
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF16214D),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.amber, width: 1.5),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.inventory_2_rounded, color: Colors.amber, size: 32),
-                      Text('${GameData.totalStars % 10}/10 ⭐', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    ],
+                child: GestureDetector(
+                  onTap: _claimChest,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: canOpen ? const Color(0xFF065F46) : const Color(0xFF16214D),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: canOpen ? const Color(0xFF00E676) : Colors.amber, width: 2),
+                      boxShadow: canOpen ? [BoxShadow(color: const Color(0xFF00E676).withOpacity(0.5), blurRadius: 14)] : null,
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.inventory_2_rounded, color: canOpen ? const Color(0xFF00E676) : Colors.amber, size: 32),
+                        Text(
+                          canOpen ? 'CLAIM! 🎁' : '${GameData.totalStars}/10 ⭐',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -689,7 +689,7 @@ class LevelSelectScreen extends StatelessWidget {
   }
 }
 
-/// ================= 3. GAMEPLAY SCREEN + PAUSE + LEVEL COMPLETE =================
+/// ================= 3. GAMEPLAY SCREEN + CORK + CONFETTI + NO MOVES =================
 class GameScreen extends StatefulWidget {
   final int levelToPlay;
   final bool isChallenge;
@@ -714,10 +714,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   late int level;
   late AnimationController _waveCtrl;
+  late AnimationController _confettiCtrl;
   List<List<Color>> bottles = [];
   List<List<List<Color>>> history = [];
   int? selected, pouring, hintFrom, hintTo;
-  bool extraUsed = false, paused = false;
+  bool extraUsed = false, paused = false, showConfetti = false;
   int moves = 0, timeLeft = 120, maxTime = 120;
   Timer? _timer;
 
@@ -726,6 +727,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     super.initState();
     level = widget.levelToPlay;
     _waveCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+    _confettiCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 3));
     _initLevel();
   }
 
@@ -733,6 +735,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void dispose() {
     _timer?.cancel();
     _waveCtrl.dispose();
+    _confettiCtrl.dispose();
     super.dispose();
   }
 
@@ -750,7 +753,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     bottles.addAll([[], []]);
     history.clear();
     selected = pouring = hintFrom = hintTo = null;
-    extraUsed = paused = false;
+    extraUsed = paused = showConfetti = false;
     moves = 0;
     maxTime = 60 + numColors * 15;
     timeLeft = maxTime;
@@ -804,25 +807,81 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       SoundEngine.instance.pour();
       setState(() => pouring = from);
       await Future.delayed(const Duration(milliseconds: 200));
+
+      bool justCompleted = false;
       setState(() {
         while (fb.isNotEmpty && fb.last == top && tb.length < cap) {
           tb.add(fb.removeLast());
         }
+        if (_isDone(tb)) justCompleted = true;
         moves++;
         selected = pouring = null;
       });
-      _checkWin();
+
+      if (justCompleted) {
+        SoundEngine.instance.vibHeavy();
+        SoundEngine.instance.bottleDone();
+      }
+
+      if (!_checkWin()) {
+        _checkNoMoves();
+      }
     } else {
       setState(() => selected = null);
     }
   }
 
-  void _checkWin() {
+  bool _hasValidMove() {
+    for (int i = 0; i < bottles.length; i++) {
+      if (bottles[i].isEmpty || _isDone(bottles[i])) continue;
+      final top = bottles[i].last;
+      for (int j = 0; j < bottles.length; j++) {
+        if (i != j && bottles[j].length < cap && (bottles[j].isEmpty || bottles[j].last == top)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  void _checkNoMoves() {
+    if (!_hasValidMove()) {
+      SoundEngine.instance.vibHeavy();
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF131B3E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('No Moves Left! 🤯', textAlign: TextAlign.center),
+          content: const Text('You are stuck! Add an extra tube or retry.', textAlign: TextAlign.center),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(onPressed: () { Navigator.pop(context); _initLevel(); }, child: const Text('Retry')),
+            if (!extraUsed)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7), foregroundColor: Colors.white),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _addTube();
+                },
+                child: const Text('+1 Tube'),
+              ),
+          ],
+        ),
+      );
+    }
+  }
+
+  bool _checkWin() {
     for (final b in bottles) {
-      if (b.isNotEmpty && !_isDone(b)) return;
+      if (b.isNotEmpty && !_isDone(b)) return false;
     }
     _timer?.cancel();
+    SoundEngine.instance.vibHeavy();
     SoundEngine.instance.win();
+    setState(() => showConfetti = true);
+    _confettiCtrl.forward(from: 0);
+
     final elapsed = maxTime - timeLeft;
     final stars = timeLeft > maxTime * 0.5 ? 3 : (timeLeft > maxTime * 0.25 ? 2 : 1);
     final reward = widget.isChallenge ? 150 : 100;
@@ -904,7 +963,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 onPressed: () {
-                  // TODO: AdMob Rewarded Ad
                   GameData.coins += reward * 2;
                   GameData.save();
                   Navigator.pop(context);
@@ -919,6 +977,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ),
       ),
     );
+    return true;
   }
 
   void _showTimeUp() {
@@ -946,12 +1005,58 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// Power-up 0 ဖြစ်သွားရင် Coins (သို့) Ad တောင်းမယ့် Dialog
+  void _showRefillDialog(String itemName, VoidCallback onGranted) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF131B3E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Out of $itemName!', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Text('Buy +1 $itemName for 50 Coins or Watch an Ad for free?', textAlign: TextAlign.center),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () {
+              if (GameData.coins >= 50) {
+                GameData.coins -= 50;
+                GameData.save();
+                Navigator.pop(context);
+                onGranted();
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Not enough coins!')));
+              }
+            },
+            child: const Text('50 🪙', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E676), foregroundColor: Colors.black),
+            onPressed: () {
+              // TODO: AdMob Rewarded Ad
+              Navigator.pop(context);
+              onGranted();
+            },
+            icon: const Icon(Icons.play_circle_fill, size: 18),
+            label: const Text('Watch Ad (Free)'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _useUndo() {
     if (history.isEmpty) return;
-    if (GameData.undoCount > 0) {
-      GameData.undoCount--;
-      GameData.save();
+    if (GameData.undoCount <= 0) {
+      _showRefillDialog('Undo', () {
+        setState(() {
+          bottles = history.removeLast();
+          selected = null;
+        });
+      });
+      return;
     }
+    GameData.undoCount--;
+    GameData.save();
     SoundEngine.instance.click();
     setState(() {
       bottles = history.removeLast();
@@ -959,16 +1064,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
-  void _useHint() {
+  void _executeHint() {
     for (int i = 0; i < bottles.length; i++) {
       if (bottles[i].isEmpty || _isDone(bottles[i])) continue;
       final top = bottles[i].last;
       for (int j = 0; j < bottles.length; j++) {
         if (i != j && bottles[j].length < cap && (bottles[j].isEmpty || bottles[j].last == top)) {
-          if (GameData.hintCount > 0) {
-            GameData.hintCount--;
-            GameData.save();
-          }
           SoundEngine.instance.click();
           setState(() { hintFrom = i; hintTo = j; });
           return;
@@ -977,17 +1078,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  void _addTube() {
-    if (extraUsed) return;
-    if (GameData.tubeCount > 0) {
-      GameData.tubeCount--;
-      GameData.save();
+  void _useHint() {
+    if (GameData.hintCount <= 0) {
+      _showRefillDialog('Hint', _executeHint);
+      return;
     }
+    GameData.hintCount--;
+    GameData.save();
+    _executeHint();
+  }
+
+  void _executeAddTube() {
     SoundEngine.instance.click();
     setState(() {
       bottles.add([]);
       extraUsed = true;
     });
+  }
+
+  void _addTube() {
+    if (extraUsed) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Extra tube already used for this level!')));
+      return;
+    }
+    if (GameData.tubeCount <= 0) {
+      _showRefillDialog('+ Tube', _executeAddTube);
+      return;
+    }
+    GameData.tubeCount--;
+    GameData.save();
+    _executeAddTube();
   }
 
   String _fmt(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
@@ -1004,7 +1124,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             child: SafeArea(
               child: Column(
                 children: [
-                  // Top Bar
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     child: Row(
@@ -1019,8 +1138,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       ],
                     ),
                   ),
-
-                  // Timer & Stars Pill
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -1040,23 +1157,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     child: Text(GameData.isMyanmar ? 'အရောင်တူများ စုထည့်ပါ' : 'Sort all colors',
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
-
-                  // Tubes
                   Expanded(
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: Wrap(
                           spacing: 18,
-                          runSpacing: 30,
+                          runSpacing: 32,
                           alignment: WrapAlignment.center,
                           children: List.generate(bottles.length, _buildTube),
                         ),
                       ),
                     ),
                   ),
-
-                  // Bottom Controls (Undo, Hint, + Tube with Badges)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     child: Row(
@@ -1072,6 +1185,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
+
+          // CONFETTI OVERLAY
+          if (showConfetti)
+            IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _confettiCtrl,
+                builder: (_, __) => CustomPaint(
+                  size: MediaQuery.of(context).size,
+                  painter: _ConfettiPainter(_confettiCtrl.value),
+                ),
+              ),
+            ),
 
           // PAUSE OVERLAY
           if (paused)
@@ -1137,15 +1262,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               ),
               child: ClipRRect(
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24), top: Radius.circular(4)),
-                child: AnimatedBuilder(
-                  animation: _waveCtrl,
-                  builder: (_, __) => CustomPaint(
-                    painter: _LiquidPainter(b, cap, _waveCtrl.value * 2 * pi),
-                  ),
+                child: Stack(
+                  children: [
+                    AnimatedBuilder(
+                      animation: _waveCtrl,
+                      builder: (_, __) => CustomPaint(
+                        size: const Size(56, 170),
+                        painter: _LiquidPainter(b, cap, _waveCtrl.value * 2 * pi),
+                      ),
+                    ),
+                    if (done)
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.45), shape: BoxShape.circle),
+                          child: const Icon(Icons.check, color: Color(0xFF00E676), size: 24),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
+          // Bottle Rim
           Positioned(
             top: (isSel || isPour) ? -24 : -4,
             child: Container(
@@ -1154,6 +1293,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(6), border: Border.all(color: border)),
             ),
           ),
+          // Bottle Complete Cork
+          if (done)
+            Positioned(
+              top: -15,
+              child: Container(
+                width: 34,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD97706),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                  border: Border.all(color: const Color(0xFFFFD166), width: 1.5),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1247,6 +1400,32 @@ class _LiquidPainter extends CustomPainter {
   bool shouldRepaint(covariant _LiquidPainter old) => true;
 }
 
+class _ConfettiPainter extends CustomPainter {
+  final double progress;
+  final Random _rng = Random(42);
+  final List<Color> _c = [const Color(0xFFFF2E63), const Color(0xFF00E5FF), const Color(0xFF00E676), const Color(0xFFFFD166), const Color(0xFFE879F9)];
+  _ConfettiPainter(this.progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (int i = 0; i < 60; i++) {
+      final x = _rng.nextDouble() * size.width + sin(progress * 10 + i) * 20;
+      final y = (progress * size.height * 1.4 * (0.6 + _rng.nextDouble() * 0.8)) - _rng.nextDouble() * 180;
+      if (y > 0 && y < size.height) {
+        final p = Paint()..color = _c[i % _c.length].withOpacity((1 - progress).clamp(0.0, 1.0));
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.rotate(progress * 8 + i);
+        canvas.drawRect(const Rect.fromLTWH(-4, -4, 8, 12), p);
+        canvas.restore();
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ConfettiPainter old) => true;
+}
+
 /// ================= 4. SHOP TAB (THEMES, HINTS, MORE + REMOVE ADS) =================
 class ShopTab extends StatefulWidget {
   final VoidCallback onRefresh;
@@ -1257,7 +1436,7 @@ class ShopTab extends StatefulWidget {
 }
 
 class _ShopTabState extends State<ShopTab> {
-  int subTab = 0; // 0: Themes, 1: Hints, 2: More
+  int subTab = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -1342,35 +1521,82 @@ class _ShopTabState extends State<ShopTab> {
                       );
                     },
                   )
-                : ListView(
-                    padding: const EdgeInsets.all(16),
+                : subTab == 1
+                    ? ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          _buyTile('5x Hints Pack 💡', 200, () { GameData.hintCount += 5; }),
+                          _buyTile('5x Undo Pack ↩️', 150, () { GameData.undoCount += 5; }),
+                          _buyTile('3x Extra Tubes 🧪', 300, () { GameData.tubeCount += 3; }),
+                        ],
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(16)),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Free +50 Coins 🪙', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E676), foregroundColor: Colors.black),
+                                  onPressed: () {
+                                    GameData.coins += 50;
+                                    GameData.save();
+                                    SoundEngine.instance.win();
+                                    setState(() {});
+                                    widget.onRefresh();
+                                  },
+                                  child: const Text('Watch Ad', style: TextStyle(fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          _buyTile('Starter Bundle (5 Hints + 5 Undo + 2 Tubes)', 500, () {
+                            GameData.hintCount += 5;
+                            GameData.undoCount += 5;
+                            GameData.tubeCount += 2;
+                          }),
+                        ],
+                      ),
+          ),
+          // Clickable Remove Ads $1.99 Banner
+          GestureDetector(
+            onTap: () {
+              SoundEngine.instance.click();
+              showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  backgroundColor: const Color(0xFF131B3E),
+                  title: const Text('Remove Ads ($1.99)'),
+                  content: const Text('Google Play Billing will be activated once published on Play Store!'),
+                  actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+                ),
+              );
+            },
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF7E22CE), Color(0xFFEC4899)]),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
                     children: [
-                      _buyTile('5x Hints Pack 💡', 200, () { GameData.hintCount += 5; }),
-                      _buyTile('5x Undo Pack ↩️', 150, () { GameData.undoCount += 5; }),
-                      _buyTile('3x Extra Tubes 🧪', 300, () { GameData.tubeCount += 3; }),
+                      Icon(Icons.block_rounded, color: Colors.white),
+                      SizedBox(width: 10),
+                      Text('Remove Ads', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                     ],
                   ),
-          ),
-          // Remove Ads $1.99 Banner
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF7E22CE), Color(0xFFEC4899)]),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.block_rounded, color: Colors.white),
-                    SizedBox(width: 10),
-                    Text('Remove Ads', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                  ],
-                ),
-                Text('\$1.99', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.amber)),
-              ],
+                  Text('\$1.99', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.amber)),
+                ],
+              ),
             ),
           ),
         ],
@@ -1384,10 +1610,7 @@ class _ShopTabState extends State<ShopTab> {
       onTap: () => setState(() => subTab = i),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        decoration: BoxDecoration(
-          color: active ? const Color(0xFF0284C7) : Colors.white12,
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: BoxDecoration(color: active ? const Color(0xFF0284C7) : Colors.white12, borderRadius: BorderRadius.circular(20)),
         child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
       ),
     );
@@ -1401,7 +1624,8 @@ class _ShopTabState extends State<ShopTab> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Expanded(child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+          const SizedBox(width: 8),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
             onPressed: () {
@@ -1412,6 +1636,8 @@ class _ShopTabState extends State<ShopTab> {
                 SoundEngine.instance.win();
                 setState(() {});
                 widget.onRefresh();
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Not enough coins!')));
               }
             },
             child: Text('$price 🪙', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -1422,10 +1648,56 @@ class _ShopTabState extends State<ShopTab> {
   }
 }
 
-/// ================= 5. DAILY REWARD (7-DAY DIALOG) =================
+/// ================= 5. DAILY REWARD (ACTUAL 7-DAY REWARDS) =================
 class DailyRewardDialog extends StatelessWidget {
   final VoidCallback onClaimed;
   const DailyRewardDialog({super.key, required this.onClaimed});
+
+  void _grantReward(BuildContext context) {
+    String msg = '';
+    switch (GameData.dailyDay) {
+      case 1:
+        GameData.coins += 100;
+        msg = 'Day 1 Claimed: +100 Coins 🪙';
+        break;
+      case 2:
+        GameData.coins += 150;
+        msg = 'Day 2 Claimed: +150 Coins 🪙';
+        break;
+      case 3:
+        GameData.hintCount += 1;
+        msg = 'Day 3 Claimed: +1 Hint 💡';
+        break;
+      case 4:
+        GameData.coins += 250;
+        msg = 'Day 4 Claimed: +250 Coins 🪙';
+        break;
+      case 5:
+        GameData.undoCount += 3;
+        msg = 'Day 5 Claimed: +3 Undo ↩️';
+        break;
+      case 6:
+        GameData.coins += 500;
+        msg = 'Day 6 Claimed: +500 Coins 🪙';
+        break;
+      case 7:
+        if (!GameData.unlockedThemes.contains('2')) {
+          GameData.unlockedThemes.add('2');
+          msg = 'Day 7 Claimed: Galaxy Theme Unlocked! 🌌';
+        } else {
+          GameData.coins += 1000;
+          msg = 'Day 7 Claimed: +1000 Bonus Coins! 🪙';
+        }
+        break;
+    }
+    GameData.dailyDay = (GameData.dailyDay % 7) + 1;
+    GameData.lastDailyDate = DateTime.now().toIso8601String().substring(0, 10);
+    GameData.save();
+    SoundEngine.instance.win();
+    onClaimed();
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1487,7 +1759,7 @@ class DailyRewardDialog extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: const LinearGradient(colors: [Color(0xFF4C1D95), Color(0xFF7E22CE)]),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.amber),
+                border: Border.all(color: GameData.dailyDay == 7 ? const Color(0xFF00E676) : Colors.amber, width: GameData.dailyDay == 7 ? 2.5 : 1),
               ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -1498,7 +1770,7 @@ class DailyRewardDialog extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Day 7', style: TextStyle(fontSize: 12, color: Colors.amber)),
-                      Text('Special Tube Skin', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                      Text('Galaxy Theme Skin', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
                     ],
                   ),
                 ],
@@ -1514,17 +1786,7 @@ class DailyRewardDialog extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                onPressed: GameData.canClaimDaily
-                    ? () {
-                        GameData.coins += 100;
-                        GameData.dailyDay = (GameData.dailyDay % 7) + 1;
-                        GameData.lastDailyDate = DateTime.now().toIso8601String().substring(0, 10);
-                        GameData.save();
-                        SoundEngine.instance.win();
-                        onClaimed();
-                        Navigator.pop(context);
-                      }
-                    : null,
+                onPressed: GameData.canClaimDaily ? () => _grantReward(context) : null,
                 child: Text(GameData.canClaimDaily ? 'Claim' : 'Claimed Today ✔',
                     style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
               ),
