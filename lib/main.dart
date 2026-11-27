@@ -151,10 +151,8 @@ class SoundEngine {
 
   final AudioPlayer _bgmPlayer = AudioPlayer();
 
-  bool _musicOn = true;
-
   Future<void> setMusic(bool on) async {
-    _musicOn = on;
+    musicOn = on;
     if (on) {
       await startBgm();
     } else {
@@ -163,7 +161,7 @@ class SoundEngine {
   }
 
   Future<void> startBgm() async {
-    if (!_musicOn) return;
+    if (!musicOn) return;
     try {
       await _bgmPlayer.setAudioContext(AudioContext(
         android: AudioContextAndroid(
@@ -622,7 +620,7 @@ class _LevelSelectScreenState extends State<LevelSelectScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = kThemes[GameData.selectedTheme];
-    final maxShow = max(20, GameData.level + 5);
+    final maxShow = max(10000, GameData.level + 20);
     final canOpen = GameData.totalStars >= 10;
 
     return Scaffold(
@@ -763,14 +761,18 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   static const int cap = 4;
   final List<Color> palette = [
-    const Color(0xFFFF2E63),
-    const Color(0xFF00E5FF),
-    const Color(0xFF00E676),
-    const Color(0xFFFFD166),
-    const Color(0xFFA855F7),
-    const Color(0xFFFF7B00),
-    const Color(0xFF2EC4B6),
-    const Color(0xFFF72585),
+    const Color(0xFFFF2E63), // Red
+    const Color(0xFF00E5FF), // Cyan
+    const Color(0xFF00E676), // Green
+    const Color(0xFFFFD166), // Yellow
+    const Color(0xFFA855F7), // Purple
+    const Color(0xFFFF7B00), // Orange
+    const Color(0xFF2EC4B6), // Teal
+    const Color(0xFFF72585), // Pink
+    const Color(0xFF3B82F6), // Royal Blue
+    const Color(0xFF84CC16), // Lime
+    const Color(0xFFE11D48), // Crimson
+    const Color(0xFFE2E8F0), // Silver White
   ];
 
   late int level;
@@ -780,6 +782,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   List<List<List<Color>>> history = [];
   int? selected, pouring, hintFrom, hintTo;
   bool extraUsed = false, paused = false, showConfetti = false;
+  bool isMysteryLevel = false;
+  int? frozenBottle;
+  int freezeMovesLeft = 0;
   int moves = 0, timeLeft = 120, maxTime = 120;
   Timer? _timer;
   BannerAd? _bannerAd;
@@ -814,21 +819,47 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _initLevel() {
     _timer?.cancel();
-    int numColors = min(3 + (level ~/ 2), palette.length);
+    int numColors;
+    if (level <= 2) {
+      numColors = 3 + level - 1;
+    } else if (level <= 10) {
+      numColors = min(4 + (level ~/ 2), 7);
+    } else if (level <= 30) {
+      numColors = min(7 + ((level - 10) ~/ 5), 10);
+    } else {
+      numColors = min(10 + ((level - 30) ~/ 15), palette.length);
+    }
+
+    // Sawtooth: ခက်တဲ့ Level ပြီးရင် နောက် ၁ ဆင့်ကို နည်းနည်းပြန်လျှော့ပေးမယ်
+    if (level > 10 && level % 10 == 1) {
+      numColors = max(6, numColors - 2);
+    }
+
     final drops = <Color>[];
     for (int i = 0; i < numColors; i++) {
       for (int j = 0; j < cap; j++) {
         drops.add(palette[i]);
       }
     }
-    drops.shuffle(Random());
+    drops.shuffle(Random(level * 997));
     bottles = List.generate(numColors, (i) => drops.sublist(i * cap, (i + 1) * cap));
     bottles.addAll([[], []]);
+
+    // Special Hard Modes: ၅ ဆင့်တစ်ခါ Mystery (?) / ၄ ဆင့်တစ်ခါ Freeze (❄️)
+    isMysteryLevel = level >= 5 && level % 5 == 0;
+    if (level >= 8 && level % 4 == 0) {
+      frozenBottle = 0;
+      freezeMovesLeft = min(3 + (level ~/ 12), 7);
+    } else {
+      frozenBottle = null;
+      freezeMovesLeft = 0;
+    }
+
     history.clear();
     selected = pouring = hintFrom = hintTo = null;
     extraUsed = paused = showConfetti = false;
     moves = 0;
-    maxTime = 60 + numColors * 15;
+    maxTime = max(55, (55 + numColors * 12) - (level ~/ 10) * 2);
     timeLeft = maxTime;
     setState(() {});
     _startTimer();
@@ -852,6 +883,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _tapBottle(int i) {
     if (paused || pouring != null || _isDone(bottles[i])) return;
+    if (i == frozenBottle && freezeMovesLeft > 0) {
+      SoundEngine.instance.vibHeavy();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(milliseconds: 900),
+          content: Text('❄️ Frozen! Make $freezeMovesLeft more moves to unlock.'),
+        ),
+      );
+      return;
+    }
     setState(() => hintFrom = hintTo = null);
     if (selected == null) {
       if (bottles[i].isNotEmpty) {
@@ -888,6 +929,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
         if (_isDone(tb)) justCompleted = true;
         moves++;
+        if (freezeMovesLeft > 0) {
+          freezeMovesLeft--;
+          if (freezeMovesLeft == 0) frozenBottle = null;
+        }
         selected = pouring = null;
       });
 
@@ -1318,7 +1363,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Widget _buildTube(int i) {
     final isSel = selected == i, isPour = pouring == i, isHint = hintFrom == i || hintTo == i;
     final b = bottles[i], done = _isDone(b);
-    final border = done ? const Color(0xFF00E676) : (isHint ? Colors.amber : (isSel ? const Color(0xFF00E5FF) : Colors.white60));
+    final isFrozen = i == frozenBottle && freezeMovesLeft > 0;
+    final double w = bottles.length > 10 ? 46 : 56;
+    final double h = bottles.length > 10 ? 142 : 170;
+    final border = isFrozen
+        ? const Color(0xFF38BDF8)
+        : (done ? const Color(0xFF00E676) : (isHint ? Colors.amber : (isSel ? const Color(0xFF00E5FF) : Colors.white60)));
 
     return GestureDetector(
       onTap: () => _tapBottle(i),
@@ -1332,31 +1382,43 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               transform: Matrix4.translationValues(0, (isSel || isPour) ? -20 : 0, 0),
-              width: 56,
-              height: 170,
+              width: w,
+              height: h,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
-                border: Border.all(color: border, width: (isSel || isHint || done) ? 3 : 2),
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(26), top: Radius.circular(6)),
+                color: isFrozen ? const Color(0xFF38BDF8).withOpacity(0.25) : Colors.white.withOpacity(0.08),
+                border: Border.all(color: border, width: (isSel || isHint || done || isFrozen) ? 3 : 2),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24), top: Radius.circular(6)),
                 boxShadow: [BoxShadow(color: border.withOpacity(0.35), blurRadius: 12)],
               ),
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24), top: Radius.circular(4)),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(22), top: Radius.circular(4)),
                 child: Stack(
                   children: [
                     AnimatedBuilder(
                       animation: _waveCtrl,
                       builder: (_, __) => CustomPaint(
-                        size: const Size(56, 170),
-                        painter: _LiquidPainter(b, cap, _waveCtrl.value * 2 * pi),
+                        size: Size(w, h),
+                        painter: _LiquidPainter(b, cap, _waveCtrl.value * 2 * pi, isMystery: isMysteryLevel),
                       ),
                     ),
+                    if (isFrozen)
+                      Container(
+                        color: const Color(0xFF0EA5E9).withOpacity(0.45),
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.ac_unit_rounded, color: Colors.white, size: 24),
+                            Text('$freezeMovesLeft', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                          ],
+                        ),
+                      ),
                     if (done)
                       Center(
                         child: Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(color: Colors.black.withOpacity(0.45), shape: BoxShape.circle),
-                          child: const Icon(Icons.check, color: Color(0xFF00E676), size: 24),
+                          child: const Icon(Icons.check, color: Color(0xFF00E676), size: 22),
                         ),
                       ),
                   ],
@@ -1368,7 +1430,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           Positioned(
             top: (isSel || isPour) ? -24 : -4,
             child: Container(
-              width: 62,
+              width: w + 6,
               height: 7,
               decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(6), border: Border.all(color: border)),
             ),
@@ -1378,7 +1440,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             Positioned(
               top: -15,
               child: Container(
-                width: 34,
+                width: w * 0.6,
                 height: 14,
                 decoration: BoxDecoration(
                   color: const Color(0xFFD97706),
@@ -1454,7 +1516,8 @@ class _LiquidPainter extends CustomPainter {
   final List<Color> colors;
   final int cap;
   final double phase;
-  _LiquidPainter(this.colors, this.cap, this.phase);
+  final bool isMystery;
+  _LiquidPainter(this.colors, this.cap, this.phase, {this.isMystery = false});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1462,9 +1525,20 @@ class _LiquidPainter extends CustomPainter {
     final h = (size.height - 14) / cap;
     for (int i = 0; i < colors.length; i++) {
       final bY = size.height - i * h, tY = bY - h;
-      final paint = Paint()..color = colors[i];
+      final isHidden = isMystery && i < colors.length - 1;
+      final paint = Paint()..color = isHidden ? const Color(0xFF1E293B) : colors[i];
       if (i < colors.length - 1) {
         canvas.drawRect(Rect.fromLTRB(0, tY, size.width, bY + 1), paint);
+        if (isHidden) {
+          final tp = TextPainter(
+            text: const TextSpan(
+              text: '?',
+              style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w900),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          tp.paint(canvas, Offset((size.width - tp.width) / 2, tY + (h - tp.height) / 2));
+        }
       } else {
         final path = Path()..moveTo(0, bY + 1)..lineTo(0, tY);
         for (double x = 0; x <= size.width; x++) {
@@ -1887,9 +1961,28 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const String _privacyUrl = 'https://kok75522727-beep.github.io/color_sort_puzzle/privacy.html';
+  static const String _contactEmail = 'kok75522727@gmail.com';
+
+  void _cycleTheme() {
+    final unlocked = GameData.unlockedThemes.map(int.parse).toList()..sort();
+    if (unlocked.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(GameData.isMyanmar ? 'Shop မှာ Theme အသစ်များ ဝယ်ယူနိုင်ပါသည်' : 'Unlock more themes in the Shop!')),
+      );
+      return;
+    }
+    final curIdx = unlocked.indexOf(GameData.selectedTheme);
+    final nextIdx = unlocked[(curIdx + 1) % unlocked.length];
+    setState(() => GameData.selectedTheme = nextIdx);
+    GameData.save();
+    SoundEngine.instance.click();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = kThemes[GameData.selectedTheme];
+    final isMy = GameData.isMyanmar;
 
     return Scaffold(
       body: Container(
@@ -1901,71 +1994,122 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Row(
                 children: [
                   IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.pop(context)),
-                  const Text('Settings', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                  Text(isMy ? 'ဆက်တင်များ' : 'Settings', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
                 ],
               ),
               const SizedBox(height: 10),
               _card([
                 SwitchListTile(
                   secondary: const Icon(Icons.volume_up, color: Color(0xFF38BDF8)),
-                  title: const Text('Sound'),
+                  title: Text(isMy ? 'အသံ (Sound)' : 'Sound'),
                   value: SoundEngine.instance.sfxOn,
-                  onChanged: (v) { setState(() => SoundEngine.instance.sfxOn = v); GameData.save(); },
+                  onChanged: (v) {
+                    setState(() => SoundEngine.instance.sfxOn = v);
+                    if (v) SoundEngine.instance.click();
+                    GameData.save();
+                  },
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.music_note, color: Color(0xFF38BDF8)),
-                  title: const Text('Music'),
+                  title: Text(isMy ? 'နောက်ခံသီချင်း (Music)' : 'Music'),
                   value: SoundEngine.instance.musicOn,
-                  onChanged: (v) async { await SoundEngine.instance.setMusic(v); setState(() {}); GameData.save(); },
+                  onChanged: (v) async {
+                    await SoundEngine.instance.setMusic(v);
+                    setState(() {});
+                    GameData.save();
+                  },
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.vibration, color: Color(0xFF38BDF8)),
-                  title: const Text('Vibration'),
+                  title: Text(isMy ? 'တုန်ခါမှု (Vibration)' : 'Vibration'),
                   value: SoundEngine.instance.vibOn,
-                  onChanged: (v) { setState(() => SoundEngine.instance.vibOn = v); GameData.save(); },
+                  onChanged: (v) {
+                    setState(() => SoundEngine.instance.vibOn = v);
+                    if (v) SoundEngine.instance.vib();
+                    GameData.save();
+                  },
                 ),
                 ListTile(
                   leading: const Icon(Icons.language, color: Color(0xFF38BDF8)),
-                  title: const Text('Language'),
-                  trailing: Text(GameData.isMyanmar ? 'မြန်မာ 🇲🇲' : 'English 🇺🇸', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
-                  onTap: () { setState(() => GameData.isMyanmar = !GameData.isMyanmar); GameData.save(); },
+                  title: Text(isMy ? 'ဘာသာစကား' : 'Language'),
+                  trailing: Text(isMy ? 'မြန်မာ 🇲🇲' : 'English 🇺🇸', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                  onTap: () {
+                    SoundEngine.instance.click();
+                    setState(() => GameData.isMyanmar = !GameData.isMyanmar);
+                    GameData.save();
+                  },
                 ),
-                const ListTile(
-                  leading: Icon(Icons.dark_mode, color: Color(0xFF38BDF8)),
-                  title: Text('Theme'),
-                  trailing: Text('Dark', style: TextStyle(color: Colors.white70)),
+                ListTile(
+                  leading: const Icon(Icons.palette_outlined, color: Color(0xFF38BDF8)),
+                  title: Text(isMy ? 'အပြင်အဆင် (Theme)' : 'Theme'),
+                  trailing: Text(theme.name, style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                  onTap: _cycleTheme,
                 ),
-                const ListTile(
-                  leading: Icon(Icons.cloud_done, color: Color(0xFF00E676)),
-                  title: Text('Save Progress'),
-                  trailing: Icon(Icons.check_circle, color: Color(0xFF00E676)),
+                ListTile(
+                  leading: const Icon(Icons.cloud_done, color: Color(0xFF00E676)),
+                  title: Text(isMy ? 'မှတ်တမ်းသိမ်းမည်' : 'Save Progress'),
+                  trailing: const Icon(Icons.check_circle, color: Color(0xFF00E676)),
+                  onTap: () async {
+                    SoundEngine.instance.click();
+                    await GameData.save();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(isMy
+                            ? 'မှတ်တမ်းသိမ်းပြီးပါပြီ (Lv.${GameData.level} • ${GameData.coins} 🪙)'
+                            : 'Progress Saved! (Lv.${GameData.level} • ${GameData.coins} 🪙)'),
+                      ),
+                    );
+                  },
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.notifications, color: Color(0xFF00E676)),
-                  title: const Text('Notifications'),
+                  title: Text(isMy ? 'အသိပေးချက်များ' : 'Notifications'),
                   value: GameData.notificationsOn,
-                  onChanged: (v) { setState(() => GameData.notificationsOn = v); GameData.save(); },
+                  onChanged: (v) {
+                    SoundEngine.instance.click();
+                    setState(() => GameData.notificationsOn = v);
+                    GameData.save();
+                  },
                 ),
               ]),
               const SizedBox(height: 16),
               _card([
                 ListTile(
                   leading: const Icon(Icons.help_outline, color: Colors.white70),
-                  title: const Text('How to Play'),
+                  title: Text(isMy ? 'ကစားနည်း' : 'How to Play'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _info(context, 'How to Play', 'Tap a tube to pick up the top color, then tap another tube to pour. Group all matching colors into one tube!'),
+                  onTap: () => _info(
+                    context,
+                    isMy ? 'ကစားနည်း' : 'How to Play',
+                    isMy
+                        ? 'ပုလင်းတစ်လုံးကို နှိပ်ပြီး အပေါ်ဆုံးအရောင်ကို ရွေးပါ။ ထို့နောက် အရောင်တူ (သို့) ပုလင်းအလွတ်ထဲသို့ လောင်းထည့်ပါ။ ပုလင်းတစ်လုံးလျှင် အရောင်တစ်မျိုးတည်း ဖြစ်အောင် စီနိုင်ပါက အနိုင်ရပါမည်။'
+                        : 'Tap a tube to pick up the top color, then tap another tube to pour. You can only pour onto the same color or into an empty tube. Group all matching colors into one tube to win!',
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.privacy_tip_outlined, color: Colors.white70),
-                  title: const Text('Privacy Policy'),
+                  title: Text(isMy ? 'ကိုယ်ရေးလုံခြုံမှု မူဝါဒ' : 'Privacy Policy'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _info(context, 'Privacy Policy', 'Your game progress is stored locally on your device. Ads are served via Google AdMob.'),
+                  onTap: () => _info(
+                    context,
+                    'Privacy Policy',
+                    'Your game progress is stored locally on your device. Ads are served via Google AdMob.\n\nPolicy URL:\n$_privacyUrl',
+                    copyText: _privacyUrl,
+                    copyLabel: 'Copy Link',
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.mail_outline, color: Colors.white70),
-                  title: const Text('Contact Us'),
+                  title: Text(isMy ? 'ဆက်သွယ်ရန်' : 'Contact Us'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _info(context, 'Contact Us', 'Support Email: support@colorsortmaster.com'),
+                  onTap: () => _info(
+                    context,
+                    'Contact Us',
+                    'Support Email:\n$_contactEmail',
+                    copyText: _contactEmail,
+                    copyLabel: 'Copy Email',
+                  ),
                 ),
               ]),
             ],
@@ -1983,6 +2127,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         child: Column(children: children),
       );
+
+  void _info(BuildContext ctx, String t, String msg, {String? copyText, String? copyLabel}) {
+    SoundEngine.instance.click();
+    showDialog(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF131B3E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(t, style: const TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(msg),
+        actions: [
+          if (copyText != null)
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: copyText));
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Copied: $copyText')));
+              },
+              child: Text(copyLabel ?? 'Copy', style: const TextStyle(color: Colors.amber)),
+            ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+        ],
+      ),
+    );
+  }
+};
 
   void _info(BuildContext ctx, String t, String msg) {
     showDialog(
