@@ -2152,19 +2152,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-};
-
-  void _info(BuildContext ctx, String t, String msg) {
-    showDialog(
-      context: ctx,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF131B3E),
-        title: Text(t),
-        content: Text(msg),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-      ),
-    );
-  }
 }
 
 /// ================= 7. RANK & EVENTS TABS =================
